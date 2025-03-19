@@ -10,6 +10,21 @@ Trie::Trie() {
     root_ = nullptr;
 }
 
+Trie::Trie(Trie&& other) noexcept
+    : root_(other.root_), patterns_(std::move(other.patterns_)) {
+    other.root_ = nullptr;
+}
+
+Trie& Trie::operator=(Trie&& other) noexcept {
+    if (this != &other) {
+        DeleteTrie(root_);
+        root_ = other.root_;
+        patterns_ = std::move(other.patterns_);
+        other.root_ = nullptr;
+    }
+    return *this;
+}
+
 Trie::Trie(const Trie& other) : patterns_(other.patterns_) {
     root_ = CopyTrie(other.root_);
 }

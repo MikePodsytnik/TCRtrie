@@ -26,6 +26,8 @@ public:
     Trie();
     Trie(const Trie& other);
     Trie& operator=(const Trie& other);
+    Trie(Trie&& other) noexcept;
+    Trie& operator=(Trie&& other) noexcept;
     ~Trie();
 
     vector<string> Search(const string& query, int maxEdits);
