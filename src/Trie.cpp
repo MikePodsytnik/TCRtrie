@@ -20,6 +20,7 @@ Trie& Trie::operator=(const Trie& other) {
         root_ = CopyTrie(other.root_);
         patterns_ = other.patterns_;
     }
+    
     return *this;
 }
 
@@ -30,6 +31,7 @@ Trie::~Trie() {
 vector<string> Trie::Search(const string& query, int maxEdits) {
     vector<string> results;
     int queryLength = query.size();
+    
     if (queryLength > MAX_QUERY_LENGTH) {
         cerr << "Query length exceeds maximum allowed length." << endl;
         return results;
@@ -39,6 +41,7 @@ vector<string> Trie::Search(const string& query, int maxEdits) {
         initialRow[i] = i;
     }
     SearchRecursive(query, maxEdits, "", root_, initialRow, queryLength, results);
+    
     return results;
 }
 
@@ -75,33 +78,6 @@ void Trie::SearchRecursive(const string &query, int maxEdits, const string &curr
     }
 }
 
-bool Trie::SearchAny(const string& query, int maxReplacements) {
-    return SearchAnyRecursive(query, 0, root_, maxReplacements);
-}
-
-
-void Trie::BuildTrie() {
-    for (int i = 0; i < patterns_.size(); ++i) {
-        TrieNode* currentNode = root_;
-        for (char c : patterns_[i]) {
-            int index = c - 'A';
-            if (currentNode->children[index] == nullptr) {
-                currentNode->children[index] = new TrieNode();
-            }
-            currentNode = currentNode->children[index];
-        }
-        currentNode->patterns_indices.push_back(i);
-    }
-}
-
-void Trie::DeleteTrie(TrieNode* node) {
-    if (!node) return;
-    for (TrieNode* childNode : node->children) {
-        DeleteTrie(childNode);
-    }
-    delete node;
-}
-
 unordered_map<string, vector<string>> Trie::SearchForAll(const vector<string>& queries, int maxReplacements) {
     unordered_map<string, vector<string>> result;
     vector<future<pair<string, vector<string>>>> futures;
@@ -133,6 +109,76 @@ unordered_map<string, vector<string>> Trie::SearchForAll(const vector<string>& q
     return result;
 }
 
+bool Trie::SearchAny(const string& query, int maxEdits) {
+    int queryLength = query.size();
+    if (queryLength > MAX_QUERY_LENGTH) {
+        cerr << "Query length exceeds maximum allowed length." << endl;
+        return false;
+    }
+    int initialRow[MAX_QUERY_LENGTH + 1];
+    for (int i = 0; i <= queryLength; ++i) {
+        initialRow[i] = i;
+    }
+    
+    return SearchAnyRecursive(query, maxEdits, root_, initialRow, queryLength);
+}
+
+bool Trie::SearchAnyRecursive(const string &query, int maxEdits, TrieNode* node, const int* prevRow, int queryLength) {
+    int currentRow[MAX_QUERY_LENGTH + 1];
+    memcpy(currentRow, prevRow, sizeof(int) * (queryLength + 1));
+    
+    if (!node->patterns_indices.empty() && currentRow[queryLength] <= maxEdits) {
+        return true;
+    }
+    
+    int minVal = *min_element(currentRow, currentRow + queryLength + 1);
+    if (minVal > maxEdits) return false;
+    
+    for (int i = 0; i < node->children.size(); ++i) {
+        TrieNode* child = node->children[i];
+        if (child == nullptr) continue;
+        char letter = 'A' + i;
+        
+        int nextRow[MAX_QUERY_LENGTH + 1];
+        nextRow[0] = currentRow[0] + 1;
+        
+        for (int j = 1; j <= queryLength; ++j) {
+            int cost = (query[j - 1] == letter) ? 0 : 1;
+            nextRow[j] = min({ currentRow[j] + 1,       // удаление
+                               nextRow[j - 1] + 1,        // вставка
+                               currentRow[j - 1] + cost   // замена/совпадение
+                             });
+        }
+        
+        if (SearchAnyRecursiveDPInPlace(query, maxEdits, child, nextRow, queryLength)) {
+            return true;
+        }
+    }
+  
+    return false;
+}
+
+void Trie::BuildTrie() {
+    for (int i = 0; i < patterns_.size(); ++i) {
+        TrieNode* currentNode = root_;
+        for (char c : patterns_[i]) {
+            int index = c - 'A';
+            if (currentNode->children[index] == nullptr) {
+                currentNode->children[index] = new TrieNode();
+            }
+            currentNode = currentNode->children[index];
+        }
+        currentNode->patterns_indices.push_back(i);
+    }
+}
+
+void Trie::DeleteTrie(TrieNode* node) {
+    if (!node) return;
+    for (TrieNode* childNode : node->children) {
+        DeleteTrie(childNode);
+    }
+    delete node;
+}
 
 Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
     if (!node) return nullptr;
@@ -149,52 +195,4 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
     }
 
     return newNode;
-}
-
-bool Trie::SearchAnyRecursive(const string& query, int pos, TrieNode* currentNode, int replacementsLeft) {
-    if (pos == query.size()) {
-        return !currentNode->patterns_indices.empty();
-    }
-
-    char currentChar = query[pos];
-    int index = currentChar - 'A';
-
-    if (!currentNode->compressedEdge.empty()) {
-        int matchLength = min((int)currentNode->compressedEdge.size(), (int)query.size() - pos);
-        int mismatches = 0;
-
-        for (int i = 0; i < matchLength; ++i) {
-            if (query[pos + i] != currentNode->compressedEdge[i]) {
-                ++mismatches;
-                if (mismatches > replacementsLeft) {
-                    return false;
-                }
-            }
-        }
-
-        pos += matchLength;
-        if (pos == query.size()) {
-            return !currentNode->patterns_indices.empty();
-        }
-
-        currentChar = query[pos];
-        index = currentChar - 'A';
-    }
-
-    for (int i = 0; i < 30; ++i) {
-        TrieNode* childNode = currentNode->children[i];
-        if (childNode == nullptr) continue;
-
-        if (i == index) {
-            if (SearchAnyRecursive(query, pos + 1, childNode, replacementsLeft)) {
-                return true;
-            }
-        } else if (replacementsLeft > 0) {
-            if (SearchAnyRecursive(query, pos + 1, childNode, replacementsLeft - 1)) {
-                return true;
-            }
-        }
-    }
-
-    return false;
 }
