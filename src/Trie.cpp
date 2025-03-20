@@ -99,7 +99,7 @@ unordered_map<string, vector<string>> Trie::SearchForAll(const vector<string>& q
     
     size_t maxConcurrent = std::thread::hardware_concurrency();
     if (maxConcurrent == 0) {
-        maxConcurrent = 32;
+        maxConcurrent = 4;
     }
 
     for (const auto& query : queries) {
