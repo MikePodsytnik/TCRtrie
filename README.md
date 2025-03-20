@@ -1,4 +1,4 @@
-# TCRtrie: Trie-Based TCR Sequence Search
+# TCRtrie: Trie-Based Neighboring CDR3 Sequences Search
 
 TCRtrie is a C++ library and command-line tool for approximate matching of T-cell receptor (TCR) sequences using a trie (prefix tree) data structure. This tool is designed for efficient similarity search in large TCR repertoire datasets, enabling researchers to quickly identify sequences that match a given query within a specified error threshold.
 
