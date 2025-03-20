@@ -16,10 +16,8 @@ public:
     struct TrieNode {
         vector<TrieNode*> children;
         vector<int> patterns_indices;
-        string compressedEdge;
-        int compressedLength = 0;
 
-        TrieNode() : children(30, nullptr), compressedEdge(""), compressedLength(0) {}
+        TrieNode() : children(30, nullptr) {}
     };
 
     Trie(const vector<string>& patterns);

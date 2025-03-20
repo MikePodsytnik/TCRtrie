@@ -6,10 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-add_executable(trie_exec
+add_executable(TCRtrie
     src/main.cpp
     src/Trie.cpp
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(trie_exec PRIVATE Threads::Threads)
+target_link_libraries(TCRtrie PRIVATE Threads::Threads)

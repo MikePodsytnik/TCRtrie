@@ -200,8 +200,6 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
 
     TrieNode* newNode = new TrieNode();
     newNode->patterns_indices = node->patterns_indices;
-    newNode->compressedEdge = node->compressedEdge;
-    newNode->compressedLength = node->compressedLength;
 
     for (size_t i = 0; i < node->children.size(); ++i) {
         if (node->children[i]) {
