@@ -45,7 +45,7 @@ private:
 
     void SearchRecursive(const string &query, int maxEdits, const string &currentPrefix, TrieNode* node, const int* prevRow, int queryLength, vector<string>& results);
 
-    bool SearchAnyRecursive(const string& query, int pos, TrieNode* currentNode, int replacementsLeft);
+    bool SearchAnyRecursive(const string &query, int maxEdits, TrieNode* node, const int* prevRow, int queryLength);
 
     void DeleteTrie(TrieNode* node);
 

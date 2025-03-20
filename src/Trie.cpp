@@ -165,7 +165,7 @@ bool Trie::SearchAnyRecursive(const string &query, int maxEdits, TrieNode* node,
                              });
         }
         
-        if (SearchAnyRecursiveDPInPlace(query, maxEdits, child, nextRow, queryLength)) {
+        if (SearchAnyRecursive(query, maxEdits, child, nextRow, queryLength)) {
             return true;
         }
     }
