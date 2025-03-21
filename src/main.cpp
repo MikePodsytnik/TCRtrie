@@ -12,7 +12,7 @@ void load_patterns(const std::string& filename, std::vector<std::string>& patter
 
 int main() {
     std::vector<std::string> patterns;
-    load_patterns("../VDJdb.txt", patterns);
+    load_patterns("../VDJdb.csv", patterns);
     Trie trie = Trie(patterns);
 
     auto start_time = std::chrono::high_resolution_clock::now();
