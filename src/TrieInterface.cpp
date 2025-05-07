@@ -73,7 +73,7 @@ void RunSearch(const SearchConfig& config) {
         if (!config.matrixPath.empty()) {
             results = trie.SearchWithScore(config.query, config.scoreRadius);
         } else {
-            results = trie.Search(config.query, config.nEdits);
+            results = trie.SearchAIRR(config.query, config.nEdits);
         }
 
         std::unordered_map<std::string, std::vector<AIRREntity>> wrapped{
@@ -98,5 +98,5 @@ void RunSearch(const SearchConfig& config) {
         std::cerr << "Error: No query provided.\n";
     }
 
-    std::cout << "Search complete. Results saved to: " << outFilePath << std::endl;
+    std::cout << "SearchAIRR complete. Results saved to: " << outFilePath << std::endl;
 }

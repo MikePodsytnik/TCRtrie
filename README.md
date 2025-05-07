@@ -1,4 +1,4 @@
-# TCRtrie: Trie-Based Neighboring CDR3 Sequences Search
+# TCRtrie: Trie-Based Neighboring CDR3 Sequences SearchAIRR
 
 TCRtrie is a C++ library and command-line tool for approximate matching of T-cell receptor (TCR) sequences using a trie (prefix tree) data structure. This tool is designed for efficient similarity search in large TCR repertoire datasets, enabling researchers to quickly identify sequences that match a given query within a specified error threshold.
 
@@ -12,8 +12,8 @@ Defining and measuring similarity between TCR sequences is challenging due to th
 
 ## Functional
 
-### Search
-**Signature:** `vector<AIRREntity> Search(const string& query, int maxEdits, optional<string> vGene = {}, optional<string> jGene = {})`
+### SearchAIRR
+**Signature:** `vector<AIRREntity> SearchAIRR(const string& query, int maxEdits, optional<string> vGene = {}, optional<string> jGene = {})`
 
 **Description:** Searches a Trie and returns a list of matching sequences whose Levenshtein distance does not exceed `maxEdits`. Can optionally filter by V and J genes.
 
@@ -79,7 +79,7 @@ The project includes a command-line tool built with [CLI11](https://github.com/C
     - A fixed-size array of child pointers (for letters 'A' to 'Z', adjusted for the alphabet used).
     - A list of indices corresponding to the patterns that terminate at that node.
 
-2. **Approximate Search:**  
+2. **Approximate SearchAIRR:**  
    When a query is executed:
     - The algorithm initializes a row of edit distances.
     - A recursive search traverses the trie, computing the Levenshtein distance for each node. As a result, instead of the conventional two-dimensional dynamic programming matrix, a branched, multi-dimensional matrix is obtained.
