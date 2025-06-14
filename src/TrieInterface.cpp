@@ -3,7 +3,9 @@
 
 #include <fstream>
 #include <filesystem>
+#include <sstream>
 #include <iostream>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -24,14 +26,14 @@ static void WriteResults(const std::string& outPath, const std::unordered_map<st
         if (hasVGene && hasJGene) break;
     }
 
-    outFile << "query\tmatch";
+    outFile << "query\tmatch\tdist";
     if (hasVGene) outFile << "\tv_gene";
     if (hasJGene) outFile << "\tj_gene";
     outFile << '\n';
 
     for (const auto& [query, matches] : results) {
         for (const auto& match : matches) {
-            outFile << query << '\t' << match.junctionAA;
+            outFile << query << '\t' << match.junctionAA << '\t' << match.distance;
             if (hasVGene) outFile << '\t' << match.vGene;
             if (hasJGene) outFile << '\t' << match.jGene;
             outFile << '\n';
@@ -69,30 +71,65 @@ void RunSearch(const SearchConfig& config) {
 
     if (!config.query.empty()) {
         std::vector<AIRREntity> results;
-
         if (!config.matrixPath.empty()) {
             results = trie.SearchWithScore(config.query, config.scoreRadius);
         } else {
             results = trie.SearchAIRR(config.query, config.nEdits);
         }
-
-        std::unordered_map<std::string, std::vector<AIRREntity>> wrapped{
-                {config.query, results}
-        };
+        std::unordered_map<std::string, std::vector<AIRREntity>> wrapped{{config.query, results}};
         WriteResults(outFilePath, wrapped);
     }
     else if (!config.inputQueries.empty()) {
-        std::vector<std::string> queries = LoadQueriesFromFile(config.inputQueries);
+        auto queries = LoadQueriesFromFile(config.inputQueries);
+        const size_t BATCH_SIZE = 1000;
+        bool firstBatch = true;
 
-        std::unordered_map<std::string, std::vector<AIRREntity>> resultMap;
+        for (size_t start = 0; start < queries.size(); start += BATCH_SIZE) {
+            size_t end = std::min(queries.size(), start + BATCH_SIZE);
+            std::vector<std::string> batchQueries(queries.begin() + start, queries.begin() + end);
 
-        if (!config.matrixPath.empty()) {
-            resultMap = trie.SearchForAllWithScore(queries, config.scoreRadius);
-        } else {
-            resultMap = trie.SearchForAll(queries, config.nEdits);
+            std::unordered_map<std::string, std::vector<AIRREntity>> batchResults;
+            if (!config.matrixPath.empty()) {
+                batchResults = trie.SearchForAllWithScore(batchQueries, config.scoreRadius);
+            } else {
+                batchResults = trie.SearchForAll(batchQueries, config.nEdits);
+            }
+
+            std::ofstream outFile(outFilePath, firstBatch ? std::ios::out : std::ios::out | std::ios::app);
+            if (!outFile.is_open()) {
+                std::cerr << "Error: Unable to write to " << outFilePath << std::endl;
+                return;
+            }
+
+            if (firstBatch) {
+                bool hasVGene = false, hasJGene = false;
+                for (const auto& [_, matches] : batchResults) {
+                    for (const auto& m : matches) {
+                        if (!m.vGene.empty()) hasVGene = true;
+                        if (!m.jGene.empty()) hasJGene = true;
+                        if (hasVGene && hasJGene) break;
+                    }
+                    if (hasVGene && hasJGene) break;
+                }
+                outFile << "query\tmatch\tdist";
+                if (hasVGene) outFile << "\tv_gene";
+                if (hasJGene) outFile << "\tj_gene";
+                outFile << '\n';
+            }
+
+            for (const auto& [query, matches] : batchResults) {
+                for (const auto& m : matches) {
+                    outFile << query << '\t'
+                            << m.junctionAA << '\t'
+                            << m.distance;
+                    if (!m.vGene.empty()) outFile << '\t' << m.vGene;
+                    if (!m.jGene.empty()) outFile << '\t' << m.jGene;
+                    outFile << '\n';
+                }
+            }
+
+            firstBatch = false;
         }
-
-        WriteResults(outFilePath, resultMap);
     }
     else {
         std::cerr << "Error: No query provided.\n";

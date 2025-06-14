@@ -1,6 +1,28 @@
 #include <CLI/CLI.hpp>
 #include "TrieInterface.h"
+#include "Trie.h"
+#include <random>
 #include <iostream>
+
+void load_patterns(const std::string& filename, std::vector<std::string>& patterns) {
+    std::ifstream file(filename);
+    std::string line;
+    while(std::getline(file, line)) {
+        patterns.push_back(line);
+    }
+}
+
+void sample_clonotypes(const std::vector<std::string>& patterns, std::vector<std::string>& clonotypes, size_t sample_size) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, patterns.size() - 1);
+
+    clonotypes.clear();
+    for (int i = 0; i < sample_size; ++i) {
+        clonotypes.push_back(patterns[dis(gen)]);
+    }
+    std::cout << "Сэмплировано " << sample_size << " клонотипов.\n";
+}
 
 int main(int argc, char** argv) {
     CLI::App app{"TCRtrie CLI – Approximate TCR sequence search"};
@@ -41,11 +63,39 @@ int main(int argc, char** argv) {
     CLI11_PARSE(app, argc, argv);
 
     try {
+        auto start_time = std::chrono::high_resolution_clock::now();
         RunSearch(config);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed_time_classic = end_time - start_time;
+        std::cout << elapsed_time_classic.count() << std::endl;
     } catch (const std::exception& ex) {
         std::cerr << "Error during search: " << ex.what() << std::endl;
         return 1;
     }
+//    std::vector<std::string> patterns;
+//    load_patterns("cdr3.txt", patterns);
+//
+//    Trie trie("/Users/mihail/CLionProjects/TCRtrie/vdjdb_airr.tsv");
+//    std::ofstream classic_results("Classic.csv");
+//    std::ofstream heuristic_results("Myers.csv");
+//
+//    for (int dist = 1; dist < 5; ++dist) {
+//        std::vector<std::string> clonotypes;
+//        sample_clonotypes(patterns, clonotypes, 200);
+//        for (auto clonotype : clonotypes) {
+//            auto start_time = std::chrono::high_resolution_clock::now();
+//            auto result = trie.Search(clonotype, dist);
+//            auto end_time = std::chrono::high_resolution_clock::now();
+//            std::chrono::duration<double, std::milli> elapsed_time_classic = end_time - start_time;
+//            auto start_time_0 = std::chrono::high_resolution_clock::now();
+//            auto result_hev = trie.Search(clonotype, dist);
+//            auto end_time_0 = std::chrono::high_resolution_clock::now();
+//            std::chrono::duration<double, std::milli> elapsed_time_hev = end_time_0 - start_time_0;
+//            classic_results << dist << ", " << elapsed_time_classic.count() << '\n';
+//            heuristic_results << dist << ", " << elapsed_time_hev.count() << '\n';
+//            std::cout << result_hev.size() << ' ' << result.size() << '\n';
+//        }
+//    }
 
     return 0;
 }

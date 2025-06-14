@@ -113,7 +113,8 @@ void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits, const std
             if (vMatch && jMatch) {
                 results.push_back(AIRREntity(sequences_[index],
                                              vGenes_[index],
-                                             jGenes_[index]));
+                                             jGenes_[index],
+                                             currentRow[queryLength]));
             }
         }
     }
@@ -139,7 +140,7 @@ void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits, const std
     }
 }
 
-std::vector<AIRREntity> Trie::SearchWithScore(const std::string& query, int maxScore,
+std::vector<AIRREntity> Trie::SearchWithScore(const std::string& query, float maxScore,
                                               const std::optional<std::string>& vGeneFilter,
                                               const std::optional<std::string>& jGeneFilter) {
     std::vector<AIRREntity> results;
@@ -155,60 +156,64 @@ std::vector<AIRREntity> Trie::SearchWithScore(const std::string& query, int maxS
         return results;
     }
 
-    int initialRow[maxQueryLength_ + 1];
-    for (int i = 0; i <= queryLength; ++i) {
-        initialRow[i] = i * depletionCost;
+    float initialRow[maxQueryLength_ + 1];
+    initialRow[0] = 0;
+    for (int i = 1; i <= queryLength; ++i) {
+        initialRow[i] = initialRow[i-1] + substitutionMatrix_.at('-').at(query[i-1]);
     }
-
-    SearchRecursiveScore(query, maxScore, "", root_, initialRow, queryLength,
+    SearchRecursiveScore(query, maxScore, root_, initialRow, queryLength,
                          results, vGeneFilter, jGeneFilter);
 
     return results;
 }
 
-void Trie::SearchRecursiveScore(const std::string &query, int maxScore, const std::string &currentPrefix,
-                                TrieNode* node, const int* prevRow, int queryLength,
+void Trie::SearchRecursiveScore(const std::string &query, float maxScore,
+                                TrieNode* node, const float * prevRow, int queryLength,
                                 std::vector<AIRREntity>& results,
                                 const std::optional<std::string>& vGeneFilter,
                                 const std::optional<std::string>& jGeneFilter) {
-    int currentRow[maxQueryLength_ + 1];
-    memcpy(currentRow, prevRow, sizeof(int) * (queryLength + 1));
+    float currentRow[maxQueryLength_ + 1];
+    memcpy(currentRow, prevRow, sizeof(float) * (queryLength + 1));
 
-    if (!node->indices.empty() && currentRow[queryLength] <= maxScore) {
+    if (!node->indices.empty() && (currentRow[queryLength] <= maxScore)) {
         for (int index : node->indices) {
             bool vMatch = !vGeneFilter || vGenes_[index] == *vGeneFilter;
             bool jMatch = !jGeneFilter || jGenes_[index] == *jGeneFilter;
             if (vMatch && jMatch) {
                 results.push_back(AIRREntity(sequences_[index],
                                              vGenes_[index],
-                                             jGenes_[index]));
+                                             jGenes_[index],
+                                             currentRow[queryLength]));
             }
         }
     }
-
-    int minVal = *std::min_element(currentRow, currentRow + queryLength + 1);
-    if (minVal > maxScore) return;
 
     for (int i = 0; i < node->children.size(); ++i) {
         TrieNode* child = node->children[i];
         if (!child) continue;
         char letter = 'A' + i;
 
-        int nextRow[maxQueryLength_ + 1];
-        nextRow[0] = currentRow[0] + insertionCost;
+        float nextRow[maxQueryLength_ + 1];
+        nextRow[0] = currentRow[0] + substitutionMatrix_.at('-').at(letter);
+        float minVal = nextRow[0];
 
+        float depletionCost = substitutionMatrix_.at('-').at(letter);
         for (int j = 1; j <= queryLength; ++j) {
             char queryChar = query[j - 1];
-            int subCost = substitutionMatrix_.at(queryChar).at(letter);
+            float subCost = substitutionMatrix_.at(queryChar).at(letter);
+            float insertionCost = substitutionMatrix_.at('-').at(queryChar);
 
             nextRow[j] = std::min({
-                                          currentRow[j] + insertionCost,
-                                          nextRow[j - 1] + depletionCost,
+                                          currentRow[j] + depletionCost,
+                                          nextRow[j - 1] + insertionCost,
                                           currentRow[j - 1] + subCost
                                   });
+            minVal = std::min(minVal, nextRow[j]);
         }
 
-        SearchRecursiveScore(query, maxScore, currentPrefix + letter, child, nextRow, queryLength,
+        if (minVal > maxScore) continue;
+
+        SearchRecursiveScore(query, maxScore, child, nextRow, queryLength,
                              results, vGeneFilter, jGeneFilter);
     }
 }
@@ -323,7 +328,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
 
 std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithScore(
         const std::vector<std::string>& queries,
-        int maxScore,
+        float maxScore,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
 
@@ -459,59 +464,79 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
 }
 
 void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
-    std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix;
-
     std::ifstream file(matrixPath);
     if (!file) {
-        std::cerr << "Error: Unable to open substitution matrix file." << std::endl;
+        std::cerr << "Cannot open matrix\n";
         return;
     }
 
     std::vector<char> letters;
     std::string line;
-    getline(file, line);
-    std::istringstream headerStream(line);
+    std::getline(file, line);
+    std::istringstream hs(line);
     char letter;
-    while (headerStream >> letter) {
+    while (hs >> letter) {
         letters.push_back(letter);
     }
 
     std::unordered_map<char, std::unordered_map<char, float>> rawScores;
-    float maxScore = -1e9;
-
-    for (char rowLetter : letters) {
-        std::unordered_map<char, float> rowMap;
+    for (char r : letters) {
         file >> letter;
+        for (char c : letters) {
+            float v;
+            file >> v;
+            rawScores[r][c] = v;
+        }
+    }
 
-        for (char colLetter : letters) {
-            float score;
-            file >> score;
-            rowMap[colLetter] = score;
-            if (score > maxScore) {
-                maxScore = score;
+    bool isCostMatrix = true;
+    for (char c : letters) {
+        if (std::abs(rawScores[c][c]) > 1e-6f) {
+            isCostMatrix = false;
+            break;
+        }
+    }
+
+    substitutionMatrix_.clear();
+
+    if (isCostMatrix) {
+        substitutionMatrix_ = rawScores;
+    } else {
+        for (char r : letters) {
+            for (char c : letters) {
+                float cost_sym = (rawScores[r][r] + rawScores[c][c]) * 0.5f
+                                 - rawScores[r][c];
+                substitutionMatrix_[r][c] = cost_sym;
             }
         }
-
-        rawScores[rowLetter] = rowMap;
     }
 
-    for (const auto& rowPair : rawScores) {
-        char rowLetter = rowPair.first;
-        const auto& rowMap = rowPair.second;
-        std::unordered_map<char, float> costRow;
-
-        for (const auto& colPair : rowMap) {
-            char colLetter = colPair.first;
-            float score = colPair.second;
-            float cost = maxScore - score;
-            costRow[colLetter] = cost;
-        }
-
-        substitutionMatrix[rowLetter] = costRow;
-    }
-
-    substitutionMatrix_ = substitutionMatrix;
     useSubstitutionMatrix_ = true;
+
+    std::vector<char> keys;
+    keys.reserve(substitutionMatrix_.size());
+    for (const auto& kv : substitutionMatrix_) {
+        keys.push_back(kv.first);
+    }
+    std::sort(keys.begin(), keys.end());
+
+    std::cout << std::setw(4) << "";
+    for (char c : keys) {
+        std::cout << std::setw(6) << c;
+    }
+    std::cout << "\n";
+
+    for (char row : keys) {
+        std::cout << std::setw(4) << row;
+        for (char col : keys) {
+            float value = substitutionMatrix_[row][col];
+            std::cout
+                    << std::setw(6)
+                    << std::fixed << std::setprecision(2)
+                    << value;
+        }
+        std::cout << "\n";
+    }
 }
 
 void Trie::SetMaxQueryLength(int newMaxQueryLength) {

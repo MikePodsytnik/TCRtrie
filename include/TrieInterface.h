@@ -9,7 +9,7 @@ struct SearchConfig {
     std::string inputQueries;
     int nEdits = 0;
     std::string matrixPath;
-    int scoreRadius = 0;
+    float scoreRadius = 0;
     std::string vGene;
     std::string jGene;
 };

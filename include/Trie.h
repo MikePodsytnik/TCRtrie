@@ -9,9 +9,6 @@
 
 class Trie {
 public:
-    int insertionCost = 4;
-    int depletionCost = 4;
-
     struct TrieNode {
         std::array<TrieNode*, 30> children{};
         std::vector<int> indices;
@@ -35,10 +32,9 @@ public:
                                        const std::optional<std::string>& vGeneFilter = std::nullopt,
                                        const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::vector<AIRREntity> SearchWithScore(const std::string& query, int maxScore,
+    std::vector<AIRREntity> SearchWithScore(const std::string& query, float maxScore,
                                             const std::optional<std::string>& vGeneFilter = std::nullopt,
                                             const std::optional<std::string>& jGeneFilter = std::nullopt);
-
 
     bool SearchAny(const std::string& query, int maxEdits);
 
@@ -49,7 +45,7 @@ public:
                                                                           const std::optional<std::string>& jGeneFilter = std::nullopt);
 
     std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAllWithScore(const std::vector<std::string>& queries,
-                                                                                   int maxScore,
+                                                                                   float maxScore,
                                                                                    const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                                    const std::optional<std::string>& jGeneFilter = std::nullopt);
 
@@ -61,6 +57,7 @@ private:
     bool useSubstitutionMatrix_ = false;
     int maxQueryLength_ = 32;
 
+    float maxDepletionCost_ = 0;
     std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix_;
     TrieNode* root_;
 
@@ -83,11 +80,11 @@ private:
                          const std::optional<std::string>& vGeneFilter,
                          const std::optional<std::string>& jGeneFilter);
 
-    void SearchRecursiveScore(const std::string &query, int maxScore, const std::string &currentPrefix,
-                              TrieNode* node, const int* prevRow, int queryLength,
-                              std::vector<AIRREntity>& results,
-                              const std::optional<std::string>& vGeneFilter,
-                              const std::optional<std::string>& jGeneFilter);
+    void SearchRecursiveScore(const std::string &query, float maxScore,
+                             TrieNode* node, const float * prevRow, int queryLength,
+                             std::vector<AIRREntity>& results,
+                             const std::optional<std::string>& vGeneFilter,
+                             const std::optional<std::string>& jGeneFilter);
 
     bool SearchAnyRecursive(const std::string &query, int maxEdits,
                             TrieNode* node, const int* prevRow, int queryLength);
