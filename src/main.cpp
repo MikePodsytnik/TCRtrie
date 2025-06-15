@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
         RunSearch(config);
         auto end_time = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> elapsed_time_classic = end_time - start_time;
-        std::cout << elapsed_time_classic.count() << std::endl;
+        std::cout << "Execution time" << elapsed_time_classic.count() << std::endl;
     } catch (const std::exception& ex) {
         std::cerr << "Error during search: " << ex.what() << std::endl;
         return 1;

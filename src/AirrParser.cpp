@@ -8,13 +8,13 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
 
     std::ifstream file(filepath);
     if (!file.is_open()) {
-        std::cerr << "[Error] Не удалось открыть " << filepath << '\n';
+        std::cerr << "[Error] Failed to open " << filepath << '\n';
         return entries;
     }
 
     std::string header;
     if (!std::getline(file, header)) {
-        std::cerr << "[Error] Пустой файл.\n";
+        std::cerr << "[Error] Empty file.\n";
         return entries;
     }
     std::unordered_map<std::string, int> colIdx;
@@ -29,13 +29,13 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
     }
     auto itJ = colIdx.find("junction_aa");
     if (itJ == colIdx.end()) {
-        std::cerr << "[Error] Нет колонки junction_aa.\n";
+        std::cerr << "[Error] No column junction_aa.\n";
         return entries;
     }
     int junctionCol = itJ->second;
     int vCol = colIdx.count("v_call") ? colIdx["v_call"] : -1;
     int jCol = colIdx.count("j_call") ? colIdx["j_call"] : -1;
-    int maxCol = std::max({junctionCol, vCol, jCol});
+    int maxCol = std::max(junctionCol, std::max(vCol, jCol));
 
     std::string line;
     while (std::getline(file, line)) {
