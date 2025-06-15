@@ -10,7 +10,7 @@
 
 Trie::Trie(const std::string& dataPath) {
     root_ = new TrieNode();
-    LoadAIRRAndBuildTrie(dataPath);
+    LoadAIRR(dataPath);
     BuildTrie();
 }
 
@@ -79,14 +79,89 @@ Trie::~Trie() {
     DeleteTrie(root_);
 }
 
-std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query, int maxEdits,
+std::vector<Trie::Stat> Trie::PruneStats(const std::vector<Trie::Stat>& stats) {
+    std::vector<Trie::Stat> res;
+    for (auto const& st : stats) {
+        bool dominated = false;
+        for (auto it = res.begin(); it != res.end(); ) {
+            auto const& ex = *it;
+            if (ex.distance <= st.distance
+                && ex.insertion <= st.insertion
+                && ex.deletion <= st.deletion
+                && ex.substitution <= st.substitution) {
+                dominated = true;
+                break;
+            }
+            if (st.distance <= ex.distance
+                && st.insertion <= ex.insertion
+                && st.deletion <= ex.deletion
+                && st.substitution <= ex.substitution) {
+                it = res.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (!dominated)
+            res.push_back(st);
+    }
+    return res;
+}
+
+std::vector<Trie::Stat> Trie::DetailedLevenshteinAll(
+        const std::string& s,
+        const std::string& t,
+        int maxEdits
+) {
+    int n = s.size(), m = t.size();
+    std::vector<std::vector<std::vector<Trie::Stat>>> dp(
+            n+1, std::vector<std::vector<Trie::Stat>>(m+1));
+
+    dp[0][0].push_back({0,0,0,0});
+    for (int i = 1; i <= n; ++i) {
+        dp[i][0].push_back({i, 0, i, 0});
+    }
+    for (int j = 1; j <= m; ++j) {
+        dp[0][j].push_back({j, j, 0, 0});
+    }
+
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            std::vector<Trie::Stat> cand;
+            for (auto const& st : dp[i-1][j]) {
+                Stat ns = st;
+                ns.distance++; ns.deletion++;
+                if (ns.distance <= maxEdits) cand.push_back(ns);
+            }
+            for (auto const& st : dp[i][j-1]) {
+                Stat ns = st;
+                ns.distance++; ns.insertion++;
+                if (ns.distance <= maxEdits) cand.push_back(ns);
+            }
+            int cost = (s[i-1] == t[j-1] ? 0 : 1);
+            for (auto const& st : dp[i-1][j-1]) {
+                Stat ns = st;
+                ns.distance += cost;
+                ns.substitution += cost;
+                if (ns.distance <= maxEdits) cand.push_back(ns);
+            }
+            dp[i][j] = PruneStats(cand);
+        }
+    }
+    return dp[n][m];
+}
+
+std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
+                                         int maxSubstitution,
+                                         int maxInsertion,
+                                         int maxDeletion,
                                          const std::optional<std::string>& vGeneFilter,
                                          const std::optional<std::string>& jGeneFilter) {
+    int maxEdits = maxSubstitution + maxInsertion + maxDeletion;
     std::vector<AIRREntity> results;
     int queryLength = query.size();
 
     if (queryLength > maxQueryLength_) {
-        std::cerr << query << " :query length exceeds maximum allowed length(32)" << std::endl;
+        std::cerr << query << " :query length exceeds maximum allowed length(" << maxQueryLength_ << ")" << std::endl;
         return results;
     }
 
@@ -95,11 +170,28 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query, int maxEdits,
         initialRow[i] = i;
     }
 
-    SearchRecursiveAIRR(query, maxEdits, "", root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
-    return results;
+    SearchRecursiveAIRR(query, maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
+    std::vector<AIRREntity> finalResult;
+    for (const auto& candidate : results) {
+        auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, maxEdits);
+        bool ok = false;
+        for (auto& st : allStats) {
+            if (st.substitution <= maxSubstitution
+                && st.insertion <= maxInsertion
+                && st.deletion <= maxDeletion) {
+                ok = true;
+                break;
+            }
+        }
+        if (ok) {
+            finalResult.push_back(candidate);
+        }
+    }
+
+    return finalResult;
 }
 
-void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits, const std::string &currentPrefix,
+void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits,
                            TrieNode* node, const int* prevRow, int queryLength,
                            std::vector<AIRREntity>& results,
                            const std::optional<std::string>& vGeneFilter,
@@ -137,7 +229,7 @@ void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits, const std
                                     currentRow[j - 1] + cost
                                   });
         }
-        SearchRecursiveAIRR(query, maxEdits, currentPrefix + letter, child, nextRow, queryLength, results, vGeneFilter, jGeneFilter);
+        SearchRecursiveAIRR(query, maxEdits, child, nextRow, queryLength, results, vGeneFilter, jGeneFilter);
     }
 }
 
@@ -298,7 +390,9 @@ std::unordered_map<std::string, std::vector<std::string>> Trie::Search(const std
 
 std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
         const std::vector<std::string>& queries,
-        int maxEdits,
+        int maxSubstitution,
+        int maxInsertion,
+        int maxDeletion,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
 
@@ -311,8 +405,20 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
         const std::string& query = queries[i];
 
         futures.emplace_back(std::async(std::launch::async,
-                                        [this, query, maxEdits, vGeneFilter, jGeneFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
-                                            return { query, this->SearchAIRR(query, maxEdits, vGeneFilter, jGeneFilter) };
+                                        [this,
+                                         query,
+                                         maxSubstitution,
+                                         maxInsertion,
+                                         maxDeletion,
+                                         vGeneFilter,
+                                         jGeneFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
+                                            return { query,
+                                                     this->SearchAIRR(query,
+                                                                      maxSubstitution,
+                                                                      maxInsertion,
+                                                                      maxDeletion,
+                                                                      vGeneFilter,
+                                                                      jGeneFilter) };
                                         }));
 
         if (futures.size() >= maxConcurrent || i == queries.size() - 1) {
@@ -416,7 +522,7 @@ bool Trie::SearchAnyRecursive(const std::string &query, int maxEdits,
     return false;
 }
 
-void Trie::LoadAIRRAndBuildTrie(const std::string& dataPath) {
+void Trie::LoadAIRR(const std::string& dataPath) {
     auto entries = ParseAIRR(dataPath);
     for (auto& e : entries) {
         sequences_.push_back(e.junctionAA);

@@ -14,6 +14,13 @@ public:
         std::vector<int> indices;
     };
 
+    struct Stat {
+        int distance;
+        int insertion;
+        int deletion;
+        int substitution;
+    };
+
     explicit Trie(const std::vector<std::string>& sequences);
     explicit Trie(const std::string& dataPath);
     Trie();
@@ -28,7 +35,10 @@ public:
     std::unordered_map<std::string, std::vector<std::string>> Search(const std::vector<std::string>& queries,
                                                                     int maxEdits);
 
-    std::vector<AIRREntity> SearchAIRR(const std::string& query, int maxEdits,
+    std::vector<AIRREntity> SearchAIRR(const std::string& query,
+                                       int maxSubstitution,
+                                       int maxInsertion,
+                                       int maxDeletion,
                                        const std::optional<std::string>& vGeneFilter = std::nullopt,
                                        const std::optional<std::string>& jGeneFilter = std::nullopt);
 
@@ -38,9 +48,10 @@ public:
 
     bool SearchAny(const std::string& query, int maxEdits);
 
-
     std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAll(const std::vector<std::string>& queries,
-                                                                          int maxEdits,
+                                                                          int maxSubstitution,
+                                                                          int maxInsertion,
+                                                                          int maxDeletion,
                                                                           const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                           const std::optional<std::string>& jGeneFilter = std::nullopt);
 
@@ -57,7 +68,6 @@ private:
     bool useSubstitutionMatrix_ = false;
     int maxQueryLength_ = 32;
 
-    float maxDepletionCost_ = 0;
     std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix_;
     TrieNode* root_;
 
@@ -74,7 +84,7 @@ private:
                          const int* prevRow, int queryLength,
                          std::vector<std::string>& results);
 
-    void SearchRecursiveAIRR(const std::string &query, int maxEdits, const std::string &currentPrefix,
+    void SearchRecursiveAIRR(const std::string &query, int maxEdits,
                          TrieNode* node, const int* prevRow, int queryLength,
                          std::vector<AIRREntity>& results,
                          const std::optional<std::string>& vGeneFilter,
@@ -89,7 +99,14 @@ private:
     bool SearchAnyRecursive(const std::string &query, int maxEdits,
                             TrieNode* node, const int* prevRow, int queryLength);
 
-    void LoadAIRRAndBuildTrie(const std::string& dataPath);
+    std::vector<Stat> PruneStats(const std::vector<Stat>& stats);
+
+    std::vector<Stat> DetailedLevenshteinAll(
+            const std::string& s,
+            const std::string& t,
+            int maxEdits);
+
+    void LoadAIRR(const std::string& dataPath);
 
     void BuildTrie();
 };

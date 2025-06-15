@@ -9,18 +9,18 @@ struct AIRREntity {
     std::string junctionAA;
     std::string vGene;
     std::string jGene;
-    double distance;
+    double distance{};
 
-    AIRREntity() {}
-
-    AIRREntity(std::string junctionAA_,
-               std::string vGene_,
-               std::string jGene_,
-               double distance_) :
-               junctionAA(std::move(junctionAA_)),
-               vGene(std::move(vGene_)),
-               jGene(std::move(jGene_)),
-               distance(distance_){}
+    AIRREntity() = default;
+    AIRREntity(std::string_view ja,
+               std::string_view v,
+               std::string_view j,
+               double d)
+            : junctionAA(ja)
+            , vGene(v)
+            , jGene(j)
+            , distance(d)
+    {}
 };
 
 std::vector<AIRREntity> ParseAIRR(const std::string& filepath);
