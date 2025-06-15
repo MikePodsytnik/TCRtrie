@@ -3,34 +3,45 @@
 #include <iostream>
 
 int main(int argc, char** argv) {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
     CLI::App app{"TCRtrie CLI – Approximate TCR sequence search"};
 
     SearchConfig config;
 
-    app.add_option("-i,--input", config.inputPath, "Path to AIRR file with patterns")->required();
+    app.add_option("-t,--trie", config.inputPath, "Path to AIRR file with sequences")->required();
     app.add_option("-o,--output", config.outputPath, "Path to output folder");
-    app.add_option("--n_edits", config.nEdits, "Allowed number of edits (Levenshtein distance)");
 
-    app.add_option("-q,--query", config.query, "Single query sequence");
-    app.add_option("--input_queries", config.inputQueries, "Path to AIRR file with batch query sequences");
+    auto* queryOpt = app.add_option("-q,--query", config.query, "Single query sequence");
+    app.add_option("--v-gene", config.vGene, "V-gene to match")->needs(queryOpt);
+    app.add_option("--j-gene", config.jGene, "J-gene to match")->needs(queryOpt);
+    app.add_option("--input-queries", config.inputQueries, "Path to AIRR file with batch query sequences");
 
-    app.add_option("--v_gene", config.vGene, "V-gene to match");
-    app.add_option("--j_gene", config.jGene, "J-gene to match");
+    app.add_option("-s,--sub", config.maxSubstitution, "Allowable number of substitutions");
+    app.add_option("-i,--ins", config.maxInsertion, "Allowed number of inserts");
+    app.add_option("-d,--del", config.maxDeletion, "Allowed number of deletions");
 
-    app.add_option("--matrix_search", config.matrixPath, "Path to substitution matrix file");
-    app.add_option("--score_radius", config.scoreRadius, "Score radius for matrix-based search")->needs("--matrix_search");
+    auto* matrixOpt = app.add_option("-m,--matrix-search", config.matrixPath, "Path to substitution matrix file");
+    app.add_option("-r,--score-radius", config.costRadius, "Score radius for matrix-based search")->needs(matrixOpt);
 
     app.callback([&]() {
+        if (config.query.empty() && config.inputQueries.empty()) {
+            throw CLI::ValidationError("No query received");
+        }
+
         if (!config.query.empty() && !config.inputQueries.empty()) {
-            throw CLI::ValidationError("Only one of --query or --input_queries should be specified.");
+            throw CLI::ValidationError("Only one of --query or --input-queries must be specified.");
         }
 
-        if (!config.query.empty() && config.matrixPath.empty() && config.nEdits == 0) {
-            throw CLI::ValidationError("Specify either --n_edits or --matrix_search for --query.");
+        if (!config.matrixPath.empty() && (config.maxSubstitution >= 0
+                                        || config.maxInsertion >= 0
+                                        || config.maxDeletion >= 0)) {
+            throw CLI::ValidationError("Only one of Levenshtein or Score search must be specified.");
         }
 
-        if (!config.matrixPath.empty() && config.scoreRadius == 0) {
-            throw CLI::ValidationError("--score_radius must be specified with --matrix_search.");
+        if (!config.matrixPath.empty() && config.costRadius < 0) {
+            throw CLI::ValidationError("--score-radius must be specified with --matrix-search.");
         }
 
         if (config.outputPath.empty()) {

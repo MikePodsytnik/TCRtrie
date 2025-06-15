@@ -7,9 +7,11 @@ struct SearchConfig {
     std::string outputPath;
     std::string query;
     std::string inputQueries;
-    int nEdits = 0;
+    int maxSubstitution = -1;
+    int maxInsertion = -1;
+    int maxDeletion = -1;
     std::string matrixPath;
-    float scoreRadius = 0;
+    float costRadius = -1;
     std::string vGene;
     std::string jGene;
 };

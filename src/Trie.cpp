@@ -173,6 +173,7 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     SearchRecursiveAIRR(query, maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
     std::vector<AIRREntity> finalResult;
     for (const auto& candidate : results) {
+        if (candidate.junctionAA == "CASSQDLGLAGGETQYF") std::cout << std::endl;
         auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, maxEdits);
         bool ok = false;
         for (auto& st : allStats) {
@@ -233,9 +234,9 @@ void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits,
     }
 }
 
-std::vector<AIRREntity> Trie::SearchWithScore(const std::string& query, float maxScore,
-                                              const std::optional<std::string>& vGeneFilter,
-                                              const std::optional<std::string>& jGeneFilter) {
+std::vector<AIRREntity> Trie::SearchWithMatrix(const std::string& query, float maxCost,
+                                               const std::optional<std::string>& vGeneFilter,
+                                               const std::optional<std::string>& jGeneFilter) {
     std::vector<AIRREntity> results;
     int queryLength = query.size();
 
@@ -254,13 +255,13 @@ std::vector<AIRREntity> Trie::SearchWithScore(const std::string& query, float ma
     for (int i = 1; i <= queryLength; ++i) {
         initialRow[i] = initialRow[i-1] + substitutionMatrix_.at('-').at(query[i-1]);
     }
-    SearchRecursiveScore(query, maxScore, root_, initialRow, queryLength,
+    SearchRecursiveCost(query, maxCost, root_, initialRow, queryLength,
                          results, vGeneFilter, jGeneFilter);
 
     return results;
 }
 
-void Trie::SearchRecursiveScore(const std::string &query, float maxScore,
+void Trie::SearchRecursiveCost(const std::string &query, float maxCost,
                                 TrieNode* node, const float * prevRow, int queryLength,
                                 std::vector<AIRREntity>& results,
                                 const std::optional<std::string>& vGeneFilter,
@@ -268,7 +269,7 @@ void Trie::SearchRecursiveScore(const std::string &query, float maxScore,
     float currentRow[maxQueryLength_ + 1];
     memcpy(currentRow, prevRow, sizeof(float) * (queryLength + 1));
 
-    if (!node->indices.empty() && (currentRow[queryLength] <= maxScore)) {
+    if (!node->indices.empty() && (currentRow[queryLength] <= maxCost)) {
         for (int index : node->indices) {
             bool vMatch = !vGeneFilter || vGenes_[index] == *vGeneFilter;
             bool jMatch = !jGeneFilter || jGenes_[index] == *jGeneFilter;
@@ -304,9 +305,9 @@ void Trie::SearchRecursiveScore(const std::string &query, float maxScore,
             minVal = std::min(minVal, nextRow[j]);
         }
 
-        if (minVal > maxScore) continue;
+        if (minVal > maxCost) continue;
 
-        SearchRecursiveScore(query, maxScore, child, nextRow, queryLength,
+        SearchRecursiveCost(query, maxCost, child, nextRow, queryLength,
                              results, vGeneFilter, jGeneFilter);
     }
 }
@@ -433,9 +434,9 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
     return result;
 }
 
-std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithScore(
+std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithMatrix(
         const std::vector<std::string>& queries,
-        float maxScore,
+        float maxCost,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
 
@@ -448,8 +449,8 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithS
         const std::string& query = queries[i];
 
         futures.push_back(std::async(std::launch::async,
-                                     [this, query, maxScore]() {
-                                         return std::make_pair(query, this->SearchWithScore(query, maxScore));
+                                     [this, query, maxCost]() {
+                                         return std::make_pair(query, this->SearchWithMatrix(query, maxCost));
                                      }));
 
         if (futures.size() >= maxConcurrent || i == queries.size() - 1) {
@@ -611,9 +612,9 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
     } else {
         for (char r : letters) {
             for (char c : letters) {
-                float cost_sym = (rawScores[r][r] + rawScores[c][c]) * 0.5f
+                float cost = (rawScores[r][r] + rawScores[c][c]) * 0.5f
                                  - rawScores[r][c];
-                substitutionMatrix_[r][c] = cost_sym;
+                substitutionMatrix_[r][c] = cost;
             }
         }
     }

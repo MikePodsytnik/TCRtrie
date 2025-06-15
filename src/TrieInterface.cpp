@@ -72,9 +72,9 @@ void RunSearch(const SearchConfig& config) {
     if (!config.query.empty()) {
         std::vector<AIRREntity> results;
         if (!config.matrixPath.empty()) {
-            results = trie.SearchWithScore(config.query, config.scoreRadius);
+            results = trie.SearchWithMatrix(config.query, config.costRadius);
         } else {
-            results = trie.SearchAIRR(config.query, config.nEdits);
+            results = trie.SearchAIRR(config.query, config.maxSubstitution, config.maxInsertion, config.maxDeletion);
         }
         std::unordered_map<std::string, std::vector<AIRREntity>> wrapped{{config.query, results}};
         WriteResults(outFilePath, wrapped);
@@ -90,9 +90,9 @@ void RunSearch(const SearchConfig& config) {
 
             std::unordered_map<std::string, std::vector<AIRREntity>> batchResults;
             if (!config.matrixPath.empty()) {
-                batchResults = trie.SearchForAllWithScore(batchQueries, config.scoreRadius);
+                batchResults = trie.SearchForAllWithMatrix(batchQueries, config.costRadius);
             } else {
-                batchResults = trie.SearchForAll(batchQueries, config.nEdits);
+                batchResults = trie.SearchForAll(batchQueries, config.maxSubstitution, config.maxInsertion, config.maxDeletion);
             }
 
             std::ofstream outFile(outFilePath, firstBatch ? std::ios::out : std::ios::out | std::ios::app);

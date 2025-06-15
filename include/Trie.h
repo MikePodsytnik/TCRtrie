@@ -42,9 +42,9 @@ public:
                                        const std::optional<std::string>& vGeneFilter = std::nullopt,
                                        const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::vector<AIRREntity> SearchWithScore(const std::string& query, float maxScore,
-                                            const std::optional<std::string>& vGeneFilter = std::nullopt,
-                                            const std::optional<std::string>& jGeneFilter = std::nullopt);
+    std::vector<AIRREntity> SearchWithMatrix(const std::string& query, float maxCost,
+                                             const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                             const std::optional<std::string>& jGeneFilter = std::nullopt);
 
     bool SearchAny(const std::string& query, int maxEdits);
 
@@ -55,10 +55,10 @@ public:
                                                                           const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                           const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAllWithScore(const std::vector<std::string>& queries,
-                                                                                   float maxScore,
-                                                                                   const std::optional<std::string>& vGeneFilter = std::nullopt,
-                                                                                   const std::optional<std::string>& jGeneFilter = std::nullopt);
+    std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAllWithMatrix(const std::vector<std::string>& queries,
+                                                                                    float maxCost,
+                                                                                    const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                                                                    const std::optional<std::string>& jGeneFilter = std::nullopt);
 
     void LoadSubstitutionMatrix(const std::string& matrixPath);
 
@@ -90,7 +90,7 @@ private:
                          const std::optional<std::string>& vGeneFilter,
                          const std::optional<std::string>& jGeneFilter);
 
-    void SearchRecursiveScore(const std::string &query, float maxScore,
+    void SearchRecursiveCost(const std::string &query, float maxCost,
                              TrieNode* node, const float * prevRow, int queryLength,
                              std::vector<AIRREntity>& results,
                              const std::optional<std::string>& vGeneFilter,

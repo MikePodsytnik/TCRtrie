@@ -13,37 +13,30 @@ Defining and measuring similarity between TCR sequences is challenging due to th
 ## Functional
 
 ### SearchAIRR
-**Signature:** `vector<AIRREntity> SearchAIRR(const string& query, int maxEdits, optional<string> vGene = {}, optional<string> jGene = {})`
 
-**Description:** Searches a Trie and returns a list of matching sequences whose Levenshtein distance does not exceed `maxEdits`. Can optionally filter by V and J genes.
+**Description:** This method implements a generalized Levenshtein distance where insertions, deletions, and substitutions are tracked separately and contribute equally to the total edit cost.
 
-### SearchWithScore
-**Signature:** `vector<AIRREntity> SearchWithScore(const string& query, int maxScore, optional<string> vGene = {}, optional<string> jGene = {})`
+### SearchWithMatrix
 
-**Description:** Searches using a substitution matrix with score threshold `maxScore`. Optional filtering by V and J genes.
+**Description:** Searches using a substitution matrix with cost threshold `maxCost`. Optional filtering by V and J genes.
 
 ### SearchAny
-**Signature:** `bool SearchAny(const string& query, int maxEdits)`
 
 **Description:** Returns `true` if at least one sequence satisfies the approximate match condition with the given query.
 
 ### SearchForAll
-**Signature:** `unordered_map<string, vector<AIRREntity>> SearchForAll(const vector<string>& queries, int maxEdits, optional<string> vGene = {}, optional<string> jGene = {})`
 
 **Description:** Performs multithreaded search for all queries with Levenshtein distance. Optional gene filtering.
 
-### SearchForAllWithScore
-**Signature:** `unordered_map<string, vector<AIRREntity>> SearchForAllWithScore(const vector<string>& queries, int maxScore, optional<string> vGene = {}, optional<string> jGene = {})`
+### SearchForAllWithMatrix
 
-**Description:** Performs multithreaded search using a substitution matrix and score threshold. Filters supported.
+**Description:** Performs multithreaded search using a substitution matrix and cost threshold. Filters supported.
 
 ### LoadSubstitutionMatrix
-**Signature:** `void LoadSubstitutionMatrix(const string& matrixPath)`
 
-**Description:** Loads a substitution matrix and converts it to a cost matrix for use in score-based search.
+**Description:** Loads a substitution matrix and converts it to a cost matrix for use in matrix-based search.
 
 ### SetMaxQueryLength
-**Signature:** `void SetMaxQueryLength(int newMaxQueryLength)`
 
 **Description:** Sets the maximum allowed query length (default is 32).
 ### CLI Interface
@@ -52,25 +45,29 @@ The project includes a command-line tool built with [CLI11](https://github.com/C
 
 ```sh
 ./TCRtrie \
-  -i data/vdjdb.tsv \
+  --trie data/vdjdb.tsv \
   -q CASSLGTDGYTF \
-  --n_edits 3 \
-  --v_gene TRBV7-9 \
-  --j_gene TRBJ2-1 \
+  --sub 3 \
+  --ins 1 \
+  --del 1 \
+  --v-gene TRBV7-9 \
+  --j-gene TRBJ2-1 \
   -o output/
 ```
 
-| Flag | Description                                                                  |
-|------|------------------------------------------------------------------------------|
-| `-i, --input <path>` | Path to the AIRR TSV file containing the repertoire to search (**required**) |
+| Flag                     | Description                                                                  |
+|--------------------------|------------------------------------------------------------------------------|
+| `-t, --trie <path>`      | Path to the AIRR TSV file containing the repertoire to search (**required**) |
 | `-q, --query <sequence>` | Single query sequence                                                        |
-| `--input_queries <path>` | AIRR TSV file with multiple queries (batch search)                           |
-| `--n_edits <int>` | Max allowed Levenshtein distance                                             |
-| `--matrix_search <path>` | Path to substitution matrix file                                             |
-| `--score_radius <float>` | Score threshold when using matrix search                                     |
-| `--v_gene <name>` | Optional filter by V-gene name                                               |
-| `--j_gene <name>` | Optional filter by J-gene name                                               |
-| `-o, --output <dir>` | Output folder (default: current directory)                                   |
+| `--input-queries <path>` | AIRR TSV file with multiple queries (batch search)                           |
+| `-s, --sub <int>`        | Max allowed number of substitutions                                          |
+| `-i,--ins <int>`         | Max allowed number of inserts                                                |
+| `-d,--del <int>`         | Max allowed number of deletions                                              |
+| `--matrix-search <path>` | Path to substitution matrix file                                             |
+| `--cost-radius <float>`  | Cost threshold for changes when using matrix search                          |
+| `--v-gene <name>`        | Optional filter by V-gene name                                               |
+| `--j-gene <name>`        | Optional filter by J-gene name                                               |
+| `-o, --output <dir>`     | Output folder (default: current directory)                                   |
 
 ## How It Works
 
