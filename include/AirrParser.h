@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <string_view>
 #include <unordered_map>
 
 struct AIRREntity {

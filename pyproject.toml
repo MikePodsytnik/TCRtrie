@@ -1,0 +1,12 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "tcrtrie"
+version = "0.1.0"
+description = "Python bindings for TCR trie search"
+requires-python = ">=3.8"
+
+[tool.scikit-build]
+wheel.packages = ["tcrtrie_"]
