@@ -596,6 +596,7 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
             float v;
             file >> v;
             rawScores[r][c] = v;
+            rawScores[c][r] = v;
         }
     }
 
