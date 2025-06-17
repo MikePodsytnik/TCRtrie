@@ -63,11 +63,14 @@ public:
 
     void LoadSubstitutionMatrix(const std::string& matrixPath);
 
+    void SetDeletionCost(float deletionCost);
+
     void SetMaxQueryLength(int newMaxQueryLength);
 
 private:
     bool useSubstitutionMatrix_ = false;
     int maxQueryLength_ = 32;
+    float deletionCost_ = -6;
 
     std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix_;
     TrieNode* root_;

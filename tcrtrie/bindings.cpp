@@ -136,5 +136,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
 
             .def("LoadSubstitutionMatrix", &Trie::LoadSubstitutionMatrix, py::arg("matrixPath"))
 
-            .def("SetMaxQueryLength", &Trie::SetMaxQueryLength, py::arg("newMaxQueryLength"));
+            .def("SetMaxQueryLength", &Trie::SetMaxQueryLength, py::arg("newMaxQueryLength"))
+
+            .def("SetDeletionCost", &Trie::SetMaxQueryLength, py::arg("deletionCost"));
 }

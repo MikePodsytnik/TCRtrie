@@ -51,31 +51,35 @@ for r in airr_results:
 
 ## Key Features
 
-`Search(query, maxEdits)`
+* `Search(query, maxEdits)`
 
 Finds sequences matching a query within a specified edit distance.
 
-`SearchAIRR(query, maxSubstitution, maxInsertion, maxDeletion, vGeneFilter, jGeneFilter)`
+* `SearchAIRR(query, maxSubstitution, maxInsertion, maxDeletion, vGeneFilter, jGeneFilter)`
 
 Advanced AIRR-compliant search with individual edit type constraints and optional gene filters.
 
-`SearchWithMatrix(query, maxCost, vGeneFilter, jGeneFilter)`
+* `SearchWithMatrix(query, maxCost, vGeneFilter, jGeneFilter)`
 
 Search using a substitution matrix with a defined cost threshold.
 
-`SearchAny(query, maxEdits)`
+* `SearchAny(query, maxEdits)`
 
 Checks if any sequence matches the query within a defined edit distance.
 
-`SearchForAll(queries, maxSubstitution, maxInsertion, maxDeletion, vGeneFilter, jGeneFilter)`
+* `SearchForAll(queries, maxSubstitution, maxInsertion, maxDeletion, vGeneFilter, jGeneFilter)`
 
 Performs batch searches with multithreading.
 
-`LoadSubstitutionMatrix(matrixPath)`
+* `LoadSubstitutionMatrix(matrixPath)`
 
 Loads and converts a substitution matrix for use in searches.
 
-`SetMaxQueryLength(newMaxQueryLength)`
+* `SetDeletionCost(float deletionCost);`
+
+Adjusts deletion cost an amino acids for use in SearchWithMatrix if you don't have it in matrix (default is -6).
+
+* `SetMaxQueryLength(newMaxQueryLength)`
 
 Adjusts maximum allowed query length (default is 32).
 

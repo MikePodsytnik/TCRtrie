@@ -193,10 +193,10 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
 }
 
 void Trie::SearchRecursiveAIRR(const std::string &query, int maxEdits,
-                           TrieNode* node, const int* prevRow, int queryLength,
-                           std::vector<AIRREntity>& results,
-                           const std::optional<std::string>& vGeneFilter,
-                           const std::optional<std::string>& jGeneFilter) {
+                               TrieNode* node, const int* prevRow, int queryLength,
+                               std::vector<AIRREntity>& results,
+                               const std::optional<std::string>& vGeneFilter,
+                               const std::optional<std::string>& jGeneFilter) {
     int currentRow[maxQueryLength_ + 1];
     memcpy(currentRow, prevRow, sizeof(int) * (queryLength + 1));
 
@@ -256,16 +256,16 @@ std::vector<AIRREntity> Trie::SearchWithMatrix(const std::string& query, float m
         initialRow[i] = initialRow[i-1] + substitutionMatrix_.at('-').at(query[i-1]);
     }
     SearchRecursiveCost(query, maxCost, root_, initialRow, queryLength,
-                         results, vGeneFilter, jGeneFilter);
+                        results, vGeneFilter, jGeneFilter);
 
     return results;
 }
 
 void Trie::SearchRecursiveCost(const std::string &query, float maxCost,
-                                TrieNode* node, const float * prevRow, int queryLength,
-                                std::vector<AIRREntity>& results,
-                                const std::optional<std::string>& vGeneFilter,
-                                const std::optional<std::string>& jGeneFilter) {
+                               TrieNode* node, const float * prevRow, int queryLength,
+                               std::vector<AIRREntity>& results,
+                               const std::optional<std::string>& vGeneFilter,
+                               const std::optional<std::string>& jGeneFilter) {
     float currentRow[maxQueryLength_ + 1];
     memcpy(currentRow, prevRow, sizeof(float) * (queryLength + 1));
 
@@ -308,7 +308,7 @@ void Trie::SearchRecursiveCost(const std::string &query, float maxCost,
         if (minVal > maxCost) continue;
 
         SearchRecursiveCost(query, maxCost, child, nextRow, queryLength,
-                             results, vGeneFilter, jGeneFilter);
+                            results, vGeneFilter, jGeneFilter);
     }
 }
 
@@ -324,11 +324,11 @@ std::vector<std::string> Trie::Search(const std::string& query, int maxEdits) {
         initialRow[i] = i;
     }
     SearchRecursive(query, maxEdits, "", root_, initialRow, queryLength, results);
-    
+
     return results;
 }
 
-void Trie::SearchRecursive(const std::string &query, int maxEdits, const std::string &currentPrefix, 
+void Trie::SearchRecursive(const std::string &query, int maxEdits, const std::string &currentPrefix,
                            TrieNode* node, const int* prevRow, int queryLength, std::vector<std::string>& results) {
     int currentRow[maxQueryLength_ + 1];
 
@@ -354,16 +354,16 @@ void Trie::SearchRecursive(const std::string &query, int maxEdits, const std::st
         for (int j = 1; j <= queryLength; ++j) {
             int cost = (query[j - 1] == letter) ? 0 : 1;
             nextRow[j] = std::min({ currentRow[j] + 1,
-                               nextRow[j - 1] + 1,
-                               currentRow[j - 1] + cost
-                             });
+                                    nextRow[j - 1] + 1,
+                                    currentRow[j - 1] + cost
+                                  });
         }
         SearchRecursive(query, maxEdits, prefix + letter, child, nextRow, queryLength, results);
     }
 }
 
 std::unordered_map<std::string, std::vector<std::string>> Trie::Search(const std::vector<std::string>& queries,
-                                                                int maxEdits) {
+                                                                       int maxEdits) {
     std::unordered_map<std::string, std::vector<std::string>> result;
     std::vector<std::future<std::pair<std::string, std::vector<std::string>>>> futures;
 
@@ -407,12 +407,12 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
 
         futures.emplace_back(std::async(std::launch::async,
                                         [this,
-                                         query,
-                                         maxSubstitution,
-                                         maxInsertion,
-                                         maxDeletion,
-                                         vGeneFilter,
-                                         jGeneFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
+                                                query,
+                                                maxSubstitution,
+                                                maxInsertion,
+                                                maxDeletion,
+                                                vGeneFilter,
+                                                jGeneFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
                                             return { query,
                                                      this->SearchAIRR(query,
                                                                       maxSubstitution,
@@ -509,10 +509,10 @@ bool Trie::SearchAnyRecursive(const std::string &query, int maxEdits,
         for (int j = 1; j <= queryLength; ++j) {
             int cost = (query[j - 1] == letter) ? 0 : 1;
             nextRow[j] = std::min({
-                currentRow[j] + 1,
-                nextRow[j - 1] + 1,
-                currentRow[j - 1] + cost
-                             });
+                                          currentRow[j] + 1,
+                                          nextRow[j - 1] + 1,
+                                          currentRow[j - 1] + cost
+                                  });
         }
 
         if (SearchAnyRecursive(query, maxEdits, child, nextRow, queryLength)) {
@@ -589,6 +589,8 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     std::unordered_map<char, std::unordered_map<char, float>> rawScores;
     for (char r : letters) {
+        rawScores[r]['-']=deletionCost_;
+        rawScores['-'][r]=deletionCost_;
         file >> letter;
         for (char c : letters) {
             float v;
@@ -607,13 +609,14 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     substitutionMatrix_.clear();
 
+    letters.push_back('-');
     if (isCostMatrix) {
         substitutionMatrix_ = rawScores;
     } else {
         for (char r : letters) {
             for (char c : letters) {
                 float cost = (rawScores[r][r] + rawScores[c][c]) * 0.5f
-                                 - rawScores[r][c];
+                             - rawScores[r][c];
                 substitutionMatrix_[r][c] = cost;
             }
         }
@@ -649,4 +652,8 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
 void Trie::SetMaxQueryLength(int newMaxQueryLength) {
     maxQueryLength_ = newMaxQueryLength;
+}
+
+void Trie::SetDeletionCost(float deletionCost) {
+    deletionCost_ = deletionCost;
 }
