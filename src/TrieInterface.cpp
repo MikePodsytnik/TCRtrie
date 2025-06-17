@@ -65,6 +65,7 @@ void RunSearch(const SearchConfig& config) {
     if (!config.matrixPath.empty()) {
         trie.LoadSubstitutionMatrix(config.matrixPath);
     }
+    trie.SetDeletionCost(config.deletionCost);
 
     fs::create_directories(config.outputPath);
     std::string outFilePath = config.outputPath + "/results.tsv";

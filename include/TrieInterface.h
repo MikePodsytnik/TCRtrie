@@ -12,6 +12,7 @@ struct SearchConfig {
     int maxDeletion = -1;
     std::string matrixPath;
     float costRadius = -1;
+    float deletionCost = -6;
     std::string vGene;
     std::string jGene;
 };
