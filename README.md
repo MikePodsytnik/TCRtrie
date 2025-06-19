@@ -24,7 +24,7 @@ One can simply install the software out-of-the-box using [pip](https://pypi.org/
 ```bash
 conda create -n tcrtrie
 conda activate tcrtrie
-git clone https://github.com/MikePodsytnik/TCRtrie@0.1.0-tcrtriepy
+pip install git+https://github.com/MikePodsytnik/TCRtrie@0.1.0-tcrtriepy
 ```
 
 Or, in case of package version problems or other issues, clone the repository manually via git, create
