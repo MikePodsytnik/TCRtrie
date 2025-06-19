@@ -18,14 +18,29 @@ TCRtriePy addresses the complexity of comparing TCR sequences, especially CDR3 r
 * C++ Compiler supporting C++17
 * CMake ≥ 3.16
 
-### Install from Source
+### Installation procedure
+One can simply install the software out-of-the-box using [pip](https://pypi.org/project/pip/)
 
 ```bash
+conda create -n tcrtrie
+conda activate tcrtrie
+git clone https://github.com/MikePodsytnik/TCRtrie@0.1.0-tcrtriepy
+```
+
+Or, in case of package version problems or other issues, clone the repository manually via git, create
+corresponding [conda](https://docs.conda.io/en/latest/) environment and install directly from sources:
+
+```{bash}
 git clone --branch TCRtriePy https://github.com/MikePodsytnik/TCRtrie.git
 cd TCRtrie
+conda create -n tcrtrie
+conda activate tcrtrie
 pip install --upgrade pip setuptools wheel scikit-build-core pybind11
 pip install .
 ```
+
+> For this method, ensure your system has a C++ Compiler supporting C++17 and CMake ≥ 3.16 installed
+
 
 ## Python API Usage
 
@@ -47,6 +62,27 @@ airr_results = trie.SearchAIRR(
 
 for r in airr_results:
    print(r.junctionAA, r.vGene, r.jGene, r.distance)
+```
+```python
+from tcrtrie import Trie
+
+# Initialize Trie from AIRR file
+trie = Trie("vdjdb_airr.tsv")
+
+# Example using Substitution Matrix
+trie.LoadSubstitutionMatrix("blosum.txt")
+# If there is no corresponding column in the matrix.txt
+trie.SetDeletionCost(-5)
+
+matrix_results = trie.SearchWithMatrix(
+    query="CASSLGTDGYTF",
+    maxCost=5.0,
+    vGeneFilter="TRBV7-9",
+    jGeneFilter="TRBJ2-1"
+)
+
+for r in matrix_results:
+    print(r.junctionAA, r.vGene, r.jGene, r.distance)
 ```
 
 ## Key Features
@@ -85,12 +121,13 @@ Adjusts maximum allowed query length (default is 32).
 
 ## Substitution Matrix Format
 
-Matrix files should follow a BLOSUM-like format:
+Matrix files should follow a BLOSUM-like format, but may also have a column for the gap score.
 
 ```
-  A   C   D   E   F
-A 2.0 0.3 -1.1 -2.7 -1.4
-C 0.3 2.3  1.0 -1.1  0.2
+    -   A    C    D    E
+-  -3 -0.8 -0.7 -1.3 -0.1
+A  2.0 0.3 -1.1 -2.7 -1.4
+C  0.3 2.3  1.0 -1.1  0.2
 ...
 ```
 
