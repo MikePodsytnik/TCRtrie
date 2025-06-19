@@ -64,17 +64,14 @@ for r in airr_results:
    print(r.junctionAA, r.vGene, r.jGene, r.distance)
 ```
 ```python
-from tcrtrie import Trie
-
-# Initialize Trie from AIRR file
-trie = Trie("vdjdb_airr.tsv")
+from tcrtrie import VDJdb
 
 # Example using Substitution Matrix
-trie.LoadSubstitutionMatrix("blosum.txt")
+VDJdb.LoadSubstitutionMatrix("blosum.txt")
 # If there is no corresponding column in the matrix.txt
-trie.SetDeletionCost(-5)
+VDJdb.SetDeletionCost(-5)
 
-matrix_results = trie.SearchWithMatrix(
+matrix_results = VDJdb.SearchWithMatrix(
     query="CASSLGTDGYTF",
     maxCost=5.0,
     vGeneFilter="TRBV7-9",
