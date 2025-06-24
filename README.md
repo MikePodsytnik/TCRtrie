@@ -63,17 +63,17 @@ from tcrtrie import VDJdb
 
 # If there is no corresponding column in the matrix.txt
 VDJdb.SetDeletionScore(-5)
-VDJdb.LoadSubstitutionMatrix("blosum.txt")
+VDJdb.LoadSubstitutionMatrix("../blosum.txt")
 
 matrix_results = VDJdb.SearchWithMatrix(
-    query="CASSLGTDGYTF",
-    maxCost=5.0,
-    vGeneFilter="TRBV7-9",
-    jGeneFilter="TRBJ2-1"
+  query="CASSLATDGYTF",
+  maxCost=5.0,
+  vGeneFilter="TRBV5-6*01",
+  jGeneFilter="TRBJ1-2*01"
 )
 
 for r in matrix_results:
-    print(r.junctionAA, r.vGene, r.jGene, r.distance)
+  print(r.junctionAA, r.vGene, r.jGene, "%.3f" %(r.distance))
 ```
 
 ## Key Features
