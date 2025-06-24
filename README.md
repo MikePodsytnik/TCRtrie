@@ -46,12 +46,12 @@ trie = Trie("vdjdb_airr.tsv")
 
 # Levenshtein distance AIRR-based search
 airr_results = trie.SearchAIRR(
-   query="CASSLGTDGYTF",
-   maxSubstitution=2,
-   maxInsertion=1,
-   maxDeletion=1,
-   vGeneFilter="TRBV7-9",
-   jGeneFilter="TRBJ2-1"
+    query="CASSEGTDGYTF",
+    maxSubstitution=2,
+    maxInsertion=1,
+    maxDeletion=1,
+    vGeneFilter="TRBV4-1*01",
+    jGeneFilter="TRBJ1-2*01"
 )
 
 for r in airr_results:
@@ -66,10 +66,10 @@ VDJdb.SetDeletionScore(-5)
 VDJdb.LoadSubstitutionMatrix("../blosum.txt")
 
 matrix_results = VDJdb.SearchWithMatrix(
-  query="CASSLATDGYTF",
-  maxCost=5.0,
-  vGeneFilter="TRBV5-6*01",
-  jGeneFilter="TRBJ1-2*01"
+    query="CASSLATDGYTF",
+    maxCost=5.0,
+    vGeneFilter="TRBV5-6*01",
+    jGeneFilter="TRBJ1-2*01"
 )
 
 for r in matrix_results:
