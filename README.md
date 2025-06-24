@@ -12,12 +12,6 @@ TCRtriePy addresses the complexity of comparing TCR sequences, especially CDR3 r
 
 ## Installation
 
-### Requirements
-
-* Python ≥ 3.8
-* C++ Compiler supporting C++17
-* CMake ≥ 3.16
-
 ### Installation procedure
 One can simply install the software out-of-the-box using [pip](https://pypi.org/project/pip/)
 
@@ -50,7 +44,7 @@ from tcrtrie import Trie
 # Initialize Trie from AIRR file
 trie = Trie("vdjdb_airr.tsv")
 
-# Advanced AIRR-based search
+# Levenshtein distance AIRR-based search
 airr_results = trie.SearchAIRR(
    query="CASSLGTDGYTF",
    maxSubstitution=2,
@@ -63,13 +57,13 @@ airr_results = trie.SearchAIRR(
 for r in airr_results:
    print(r.junctionAA, r.vGene, r.jGene, r.distance)
 ```
+Example using Substitution Matrix and [VDJdb](https://vdjdb.cdr3.net/)
 ```python
 from tcrtrie import VDJdb
 
-# Example using Substitution Matrix
-VDJdb.LoadSubstitutionMatrix("blosum.txt")
 # If there is no corresponding column in the matrix.txt
-VDJdb.SetDeletionCost(-5)
+VDJdb.SetDeletionScore(-5)
+VDJdb.LoadSubstitutionMatrix("blosum.txt")
 
 matrix_results = VDJdb.SearchWithMatrix(
     query="CASSLGTDGYTF",
@@ -111,12 +105,12 @@ for r in matrix_results:
 
 * `LoadSubstitutionMatrix(matrixPath)`
 
-    Loads and converts a substitution matrix for use in searches.
+    Loads a substitution matrix and converts into substitution-cost matrix for use in searches.
 
 
-* `SetDeletionCost(float deletionCost);`
+* `SetDeletionScore(float deletionScore);`
 
-    Adjusts deletion cost an amino acids for use in SearchWithMatrix if you don't have it in matrix (default is -6).
+    Adjusts deletion score an amino acids for use in SearchWithMatrix if you don't have it in matrix (default is -6).
 
 
 * `SetMaxQueryLength(newMaxQueryLength)`
