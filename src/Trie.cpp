@@ -669,8 +669,8 @@ void Trie::UpdateSubstitutionMatrix(float deletionScore) {
 
         substitutionMatrix_[c]['-'] -= deletionScore_ * 0.5f;
         substitutionMatrix_['-'][c] -= deletionScore_ * 0.5f;
-        substitutionMatrix_[c]['-'] += deletionScore * 0.5f;
-        substitutionMatrix_['-'][c] += deletionScore * 0.5f;
+        substitutionMatrix_[c]['-'] += fabs(deletionScore_) * 0.5f;
+        substitutionMatrix_['-'][c] += fabs(deletionScore_) * 0.5f;
     }
 }
 
