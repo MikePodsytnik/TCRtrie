@@ -173,7 +173,6 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     SearchRecursiveAIRR(query, maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
     std::vector<AIRREntity> finalResult;
     for (const auto& candidate : results) {
-        if (candidate.junctionAA == "CASSQDLGLAGGETQYF") std::cout << std::endl;
         auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, maxEdits);
         bool ok = false;
         for (auto& st : allStats) {
