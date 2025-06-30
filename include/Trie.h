@@ -2,11 +2,11 @@
 
 #include "AirrParser.h"
 
-#include <vector>
-#include <unordered_map>
 #include <array>
-#include <string>
 #include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 class Trie {
 public:
@@ -87,25 +87,25 @@ private:
 
     void PrintMatrix();
 
-    void SearchRecursive(const std::string &query, int maxEdits,
-                         const std::string &currentPrefix, TrieNode* node,
-                         const int* prevRow, int queryLength,
+    void SearchRecursive(const std::string& query, int maxEdits,
+                         const std::string& currentPrefix, TrieNode* node,
+                         std::vector<int>& prevRow, int queryLength,
                          std::vector<std::string>& results);
 
-    void SearchRecursiveAIRR(const std::string &query, int maxEdits,
-                             TrieNode* node, const int* prevRow, int queryLength,
+    void SearchRecursiveAIRR(const std::string& query, int maxEdits,
+                             TrieNode* node, std::vector<int>& prevRow, int queryLength,
                              std::vector<AIRREntity>& results,
                              const std::optional<std::string>& vGeneFilter,
                              const std::optional<std::string>& jGeneFilter);
 
-    void SearchRecursiveCost(const std::string &query, float maxCost,
-                             TrieNode* node, const float * prevRow, int queryLength,
+    void SearchRecursiveCost(const std::string& query, float maxCost,
+                             TrieNode* node, std::vector<float>& prevRow, int queryLength,
                              std::vector<AIRREntity>& results,
                              const std::optional<std::string>& vGeneFilter,
                              const std::optional<std::string>& jGeneFilter);
 
-    bool SearchAnyRecursive(const std::string &query, int maxEdits,
-                            TrieNode* node, const int* prevRow, int queryLength);
+    bool SearchAnyRecursive(const std::string& query, int maxEdits,
+                            TrieNode* node, std::vector<int>& prevRow, int queryLength);
 
     std::vector<Stat> PruneStats(const std::vector<Stat>& stats);
 
