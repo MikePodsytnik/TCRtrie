@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 
     auto* matrixOpt = app.add_option("-m,--matrix-search", config.matrixPath, "Path to substitution matrix file");
     app.add_option("-r,--score-radius", config.costRadius, "Score radius for matrix-based search")->needs(matrixOpt);
-    app.add_option("--deletion-cost", config.deletionCost, "Cost for deletion for matrix-based search")->needs(matrixOpt);
+    app.add_option("--deletion-score", config.deletionScore, "Cost for deletion for matrix-based search")->needs(matrixOpt);
 
     app.callback([&]() {
         if (config.query.empty() && config.inputQueries.empty()) {

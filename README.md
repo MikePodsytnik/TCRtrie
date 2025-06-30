@@ -69,6 +69,21 @@ The project includes a command-line tool built with [CLI11](https://github.com/C
 | `--j-gene <name>`        | Optional filter by J-gene name                                               |
 | `-o, --output <dir>`     | Output folder (default: current directory)                                   |
 
+## Installation
+
+### Requirements
+- **C++ Compiler:** C++17+
+- **CMake:** Build system
+
+### Build Instructions
+```sh
+git clone https://github.com/yourusername/TCRtrie.git
+cd TCRtrie
+mkdir build && cd build
+cmake ..
+make
+```
+
 ## How It Works
 
 1. **Trie Construction:**  
@@ -120,22 +135,6 @@ query	match
 If `v_gene` or `j_gene` information is present in the match entries, additional columns will be included:
 ```
 query	match	v_gene	j_gene
-```
-
-
-## Installation
-
-### Requirements
-- **C++ Compiler:** C++17+
-- **CMake:** Build system
-
-### Build Instructions
-```sh
-git clone https://github.com/yourusername/TCRtrie.git
-cd TCRtrie
-mkdir build && cd build
-cmake ..
-make
 ```
 
 ## Contributing

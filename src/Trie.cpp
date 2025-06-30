@@ -1,11 +1,12 @@
 #include "Trie.h"
 
-#include <iomanip>
-#include <iostream>
+#include <algorithm>
 #include <cstring>
 #include <future>
-#include <algorithm>
 #include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <cmath>
 #include <sstream>
 
 Trie::Trie(const std::string& dataPath) {
@@ -449,8 +450,11 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
         const std::string& query = queries[i];
 
         futures.push_back(std::async(std::launch::async,
-                                     [this, query, maxCost]() {
-                                         return std::make_pair(query, this->SearchWithMatrix(query, maxCost));
+                                     [this, query, maxCost, vGeneFilter, jGeneFilter]() {
+                                         return std::make_pair(query, this->SearchWithMatrix(query,
+                                                                                             maxCost,
+                                                                                             vGeneFilter,
+                                                                                             jGeneFilter));
                                      }));
 
         if (futures.size() >= maxConcurrent || i == queries.size() - 1) {
@@ -588,25 +592,21 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
     }
 
     std::unordered_map<char, std::unordered_map<char, float>> rawScores;
+    bool isCostMatrix = true;
+    rawScores['-']['-'] = fabs(deletionScore_);
     for (char r : letters) {
-        rawScores[r]['-']=deletionCost_;
-        rawScores['-'][r]=deletionCost_;
+        rawScores[r]['-']=deletionScore_;
+        rawScores['-'][r]=deletionScore_;
         file >> letter;
         for (char c : letters) {
             float v;
             file >> v;
             rawScores[r][c] = v;
             rawScores[c][r] = v;
+            if (v > 1e-6f) { isCostMatrix = false; }
         }
     }
-
-    bool isCostMatrix = true;
-    for (char c : letters) {
-        if (std::abs(rawScores[c][c]) > 1e-6f) {
-            isCostMatrix = false;
-            break;
-        }
-    }
+    deletionScore_ = rawScores['-']['-'];
 
     letters.push_back('-');
 
@@ -626,6 +626,11 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     useSubstitutionMatrix_ = true;
 
+    std::cout << "Substitution-Score Matrix:" << std::endl;
+    PrintMatrix();
+}
+
+void Trie::PrintMatrix() {
     std::vector<char> keys;
     keys.reserve(substitutionMatrix_.size());
     for (const auto& kv : substitutionMatrix_) {
@@ -656,6 +661,28 @@ void Trie::SetMaxQueryLength(int newMaxQueryLength) {
     maxQueryLength_ = newMaxQueryLength;
 }
 
-void Trie::SetDeletionCost(float deletionCost) {
-    deletionCost_ = deletionCost;
+void Trie::UpdateSubstitutionMatrix(float deletionScore) {
+    std::vector<char> keys;
+    keys.reserve(substitutionMatrix_.size());
+    for (const auto& kv : substitutionMatrix_) {
+        keys.push_back(kv.first);
+    }
+    for (auto c : keys) {
+        if (c == '-') continue;
+
+        substitutionMatrix_[c]['-'] -= deletionScore_ * 0.5f;
+        substitutionMatrix_['-'][c] -= deletionScore_ * 0.5f;
+        substitutionMatrix_[c]['-'] += fabs(deletionScore) * 0.5f;
+        substitutionMatrix_['-'][c] += fabs(deletionScore) * 0.5f;
+    }
+}
+
+void Trie::SetDeletionScore(float deletionScore) {
+    std::cout << "New deletion score: " << deletionScore << std::endl;
+    if (useSubstitutionMatrix_) {
+        std::cout << "New Substitution-Score Matrix:" << std::endl;
+        UpdateSubstitutionMatrix(deletionScore);
+        PrintMatrix();
+    }
+    deletionScore_ = deletionScore;
 }

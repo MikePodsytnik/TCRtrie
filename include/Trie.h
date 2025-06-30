@@ -63,14 +63,14 @@ public:
 
     void LoadSubstitutionMatrix(const std::string& matrixPath);
 
-    void SetDeletionCost(float deletionCost);
+    void SetDeletionScore(float deletionCost);
 
     void SetMaxQueryLength(int newMaxQueryLength);
 
 private:
     bool useSubstitutionMatrix_ = false;
     int maxQueryLength_ = 32;
-    float deletionCost_ = -6;
+    float deletionScore_ = -6;
 
     std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix_;
     TrieNode* root_;
@@ -82,6 +82,10 @@ private:
     void DeleteTrie(TrieNode* node);
 
     TrieNode* CopyTrie(const TrieNode* node);
+
+    void UpdateSubstitutionMatrix(float deletionScore);
+
+    void PrintMatrix();
 
     void SearchRecursive(const std::string &query, int maxEdits,
                          const std::string &currentPrefix, TrieNode* node,
