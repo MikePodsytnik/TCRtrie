@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <utility>
 
-std::vector<AIRREntity> ParseAIRR(const std::string &filepath) {
+std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
     std::vector<AIRREntity> entries;
 
     std::ifstream file(filepath);
@@ -20,12 +20,13 @@ std::vector<AIRREntity> ParseAIRR(const std::string &filepath) {
         std::cerr << "[Error] Empty file.\n";
         return entries;
     }
-    std::unordered_map<std::string, int> colIdx; {
+    std::unordered_map<std::string, int> colIdx;
+    {
         int idx = 0, pos = 0;
-        while (pos <= (int) header.size()) {
+        while (pos <= (int)header.size()) {
             int tab = header.find('\t', pos);
             if (tab == std::string::npos) tab = header.size();
-            colIdx[header.substr(pos, tab - pos)] = idx++;
+            colIdx[ header.substr(pos, tab - pos) ] = idx++;
             pos = tab + 1;
         }
     }
@@ -49,13 +50,15 @@ std::vector<AIRREntity> ParseAIRR(const std::string &filepath) {
             size_t end = line.find('\t', start);
             if (end == std::string::npos) end = line.size();
 
-            std::string_view fv{line.data() + start, end - start};
+            std::string_view fv{ line.data() + start, end - start };
             if (col == junctionCol) {
                 ent.junctionAA.assign(fv);
                 if (ent.junctionAA.empty()) break;
-            } else if (col == vCol) {
+            }
+            else if (col == vCol) {
                 ent.vGene.assign(fv);
-            } else if (col == jCol) {
+            }
+            else if (col == jCol) {
                 ent.jGene.assign(fv);
             }
 

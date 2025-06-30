@@ -34,7 +34,7 @@ public:
     std::vector<std::string> Search(const std::string& query, int maxEdits);
 
     std::unordered_map<std::string, std::vector<std::string>> Search(const std::vector<std::string>& queries,
-                                                                    int maxEdits);
+                                                                     int maxEdits);
 
     std::vector<AIRREntity> SearchAIRR(const std::string& query,
                                        int maxSubstitution,
@@ -63,11 +63,14 @@ public:
 
     void LoadSubstitutionMatrix(const std::string& matrixPath);
 
+    void SetDeletionScore(float deletionScore);
+
     void SetMaxQueryLength(int newMaxQueryLength);
 
 private:
     bool useSubstitutionMatrix_ = false;
     int maxQueryLength_ = 32;
+    float deletionScore_ = -6;
 
     std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix_;
     TrieNode* root_;
@@ -80,16 +83,20 @@ private:
 
     TrieNode* CopyTrie(const TrieNode* node);
 
+    void UpdateSubstitutionMatrix(float deletionScore);
+
+    void PrintMatrix();
+
     void SearchRecursive(const std::string &query, int maxEdits,
                          const std::string &currentPrefix, TrieNode* node,
                          const int* prevRow, int queryLength,
                          std::vector<std::string>& results);
 
     void SearchRecursiveAIRR(const std::string &query, int maxEdits,
-                         TrieNode* node, const int* prevRow, int queryLength,
-                         std::vector<AIRREntity>& results,
-                         const std::optional<std::string>& vGeneFilter,
-                         const std::optional<std::string>& jGeneFilter);
+                             TrieNode* node, const int* prevRow, int queryLength,
+                             std::vector<AIRREntity>& results,
+                             const std::optional<std::string>& vGeneFilter,
+                             const std::optional<std::string>& jGeneFilter);
 
     void SearchRecursiveCost(const std::string &query, float maxCost,
                              TrieNode* node, const float * prevRow, int queryLength,
