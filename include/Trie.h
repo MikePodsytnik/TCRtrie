@@ -2,10 +2,11 @@
 
 #include "AirrParser.h"
 
-#include <vector>
-#include <unordered_map>
-#include <string>
+#include <array>
 #include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 class Trie {
 public:

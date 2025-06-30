@@ -1,11 +1,11 @@
-#include "TrieInterface.h"
 #include "Trie.h"
+#include "TrieInterface.h"
 
-#include <fstream>
-#include <filesystem>
-#include <sstream>
-#include <iostream>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 namespace fs = std::filesystem;
 

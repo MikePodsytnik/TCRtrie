@@ -1,11 +1,11 @@
 #include "Trie.h"
 
+#include <algorithm>
+#include <cstring>
+#include <fstream>
+#include <future>
 #include <iomanip>
 #include <iostream>
-#include <cstring>
-#include <future>
-#include <algorithm>
-#include <fstream>
 #include <sstream>
 
 Trie::Trie(const std::string& dataPath) {
