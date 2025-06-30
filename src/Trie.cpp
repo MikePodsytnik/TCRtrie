@@ -449,8 +449,11 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
         const std::string& query = queries[i];
 
         futures.push_back(std::async(std::launch::async,
-                                     [this, query, maxCost]() {
-                                         return std::make_pair(query, this->SearchWithMatrix(query, maxCost));
+                                     [this, query, maxCost, vGeneFilter, jGeneFilter]() {
+                                         return std::make_pair(query, this->SearchWithMatrix(query,
+                                                                                             maxCost,
+                                                                                             vGeneFilter,
+                                                                                             jGeneFilter));
                                      }));
 
         if (futures.size() >= maxConcurrent || i == queries.size() - 1) {
