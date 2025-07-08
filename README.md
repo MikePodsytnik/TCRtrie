@@ -77,7 +77,7 @@ The project includes a command-line tool built with [CLI11](https://github.com/C
 
 ### Build Instructions
 ```sh
-git clone https://github.com/yourusername/TCRtrie.git
+git clone https://github.com/MikePodsytnik/TCRtrie.git
 cd TCRtrie
 mkdir build && cd build
 cmake ..
