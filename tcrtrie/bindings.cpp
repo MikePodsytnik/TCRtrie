@@ -26,9 +26,14 @@ PYBIND11_MODULE(_tcrtrie, m) {
 
     py::class_<Trie>(m, "Trie")
             .def(py::init<>())
-            .def(py::init<const std::vector<std::string>&>(), py::arg("sequences"))
             .def(py::init<const std::string&>(), py::arg("dataPath"))
             .def(py::init<const Trie&>(), py::arg("other"))
+            .def(py::init<const std::vector<std::string>&,
+                          const std::vector<std::string>&,
+                          const std::vector<std::string>&>(),
+                          py::arg("sequences"),
+                          py::arg("vGenes"),
+                          py::arg("jGenes"))
 
             .def("Search",
                  [](Trie &self, const std::string &query, int maxEdits) {

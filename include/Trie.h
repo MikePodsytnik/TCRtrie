@@ -22,9 +22,11 @@ public:
         int substitution;
     };
 
-    explicit Trie(const std::vector<std::string>& sequences);
     explicit Trie(const std::string& dataPath);
-    Trie();
+    explicit Trie(const std::vector<std::string>& sequences,
+                  const std::vector<std::string>& vGenes,
+                  const std::vector<std::string>& jGenes);
+    explicit Trie();
     Trie(const Trie& other);
     Trie& operator=(const Trie& other);
     Trie(Trie&& other) noexcept;

@@ -15,9 +15,13 @@ Trie::Trie(const std::string& dataPath) {
     BuildTrie();
 }
 
-Trie::Trie(const std::vector<std::string>& sequences)
-        : root_(new TrieNode()), sequences_(sequences)
-{
+Trie::Trie(const std::vector<std::string>& sequences,
+           const std::vector<std::string>& vGenes,
+           const std::vector<std::string>& jGenes) :
+           root_(new TrieNode()),
+           sequences_(sequences),
+           vGenes_(vGenes),
+           jGenes_(jGenes) {
     BuildTrie();
 }
 
