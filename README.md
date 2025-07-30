@@ -102,6 +102,10 @@ for r in matrix_results:
 
     Performs batch searches with multithreading.
 
+* `SearchForAllWithMatrix(queries, maxCost, vGeneFilter, jGeneFilter)`
+
+    Batch search using a substitution matrix with multithreading.
+
 
 * `LoadSubstitutionMatrix(matrixPath)`
 
