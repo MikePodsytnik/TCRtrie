@@ -62,6 +62,7 @@ static std::vector<std::string> LoadQueriesFromFile(const std::string& path) {
 void RunSearch(const SearchConfig& config) {
     Trie trie(config.inputPath);
 
+    trie.SetDeletionScore(config.deletionScore);
     if (!config.matrixPath.empty()) {
         trie.LoadSubstitutionMatrix(config.matrixPath);
     }
