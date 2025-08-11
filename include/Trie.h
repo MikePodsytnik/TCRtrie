@@ -69,6 +69,8 @@ public:
 
     void SetMaxQueryLength(int newMaxQueryLength);
 
+    void PrintMatrix();
+
 private:
     bool useSubstitutionMatrix_ = false;
     int maxQueryLength_ = 32;
@@ -86,8 +88,6 @@ private:
     TrieNode* CopyTrie(const TrieNode* node);
 
     void UpdateSubstitutionMatrix(float deletionScore);
-
-    void PrintMatrix();
 
     void SearchRecursive(const std::string& query, int maxEdits,
                          const std::string& currentPrefix, TrieNode* node,

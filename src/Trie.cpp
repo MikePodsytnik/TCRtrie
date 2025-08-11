@@ -629,9 +629,6 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
     }
 
     useSubstitutionMatrix_ = true;
-
-    std::cout << "Substitution-Score Matrix:" << std::endl;
-    PrintMatrix();
 }
 
 void Trie::PrintMatrix() {
