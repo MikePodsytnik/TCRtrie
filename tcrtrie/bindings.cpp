@@ -55,6 +55,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     int maxSubstitution,
                     int maxInsertion,
                     int maxDeletion,
+                    std::optional<int> maxEdits,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
                      return call_without_gil(&Trie::SearchAIRR,
@@ -63,13 +64,15 @@ PYBIND11_MODULE(_tcrtrie, m) {
                                              maxSubstitution,
                                              maxInsertion,
                                              maxDeletion,
+                                             maxEdits,
                                              vGeneFilter,
                                              jGeneFilter);
                  },
                  py::arg("query"),
-                 py::arg("maxSubstitution"),
-                 py::arg("maxInsertion"),
-                 py::arg("maxDeletion"),
+                 py::arg("maxSubstitution") = 0,
+                 py::arg("maxInsertion") = 0,
+                 py::arg("maxDeletion") = 0,
+                 py::arg("maxEdits") = std::nullopt,
                  py::arg("vGeneFilter") = std::nullopt,
                  py::arg("jGeneFilter") = std::nullopt)
 
@@ -103,6 +106,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     int maxSubstitution,
                     int maxInsertion,
                     int maxDeletion,
+                    std::optional<int> maxEdits,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
                      return call_without_gil(&Trie::SearchForAll,
@@ -111,13 +115,15 @@ PYBIND11_MODULE(_tcrtrie, m) {
                                              maxSubstitution,
                                              maxInsertion,
                                              maxDeletion,
+                                             maxEdits,
                                              vGeneFilter,
                                              jGeneFilter);
                  },
                  py::arg("queries"),
-                 py::arg("maxSubstitution"),
-                 py::arg("maxInsertion"),
-                 py::arg("maxDeletion"),
+                 py::arg("maxSubstitution") = 0,
+                 py::arg("maxInsertion") = 0,
+                 py::arg("maxDeletion") = 0,
+                 py::arg("maxEdits") = std::nullopt,
                  py::arg("vGeneFilter") = std::nullopt,
                  py::arg("jGeneFilter") = std::nullopt)
 

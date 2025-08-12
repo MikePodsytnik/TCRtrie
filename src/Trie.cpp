@@ -159,9 +159,12 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
                                          int maxSubstitution,
                                          int maxInsertion,
                                          int maxDeletion,
+                                         std::optional<int> maxEdits,
                                          const std::optional<std::string>& vGeneFilter,
                                          const std::optional<std::string>& jGeneFilter) {
-    int maxEdits = maxSubstitution + maxInsertion + maxDeletion;
+    if (!maxEdits.has_value() || *maxEdits < 0) {
+        maxEdits = maxSubstitution + maxInsertion + maxDeletion;
+    }
     std::vector<AIRREntity> results;
     int queryLength = query.size();
 
@@ -175,10 +178,10 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
         initialRow[i] = i;
     }
 
-    SearchRecursiveAIRR(query, maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
+    SearchRecursiveAIRR(query, *maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
     std::vector<AIRREntity> finalResult;
     for (const auto& candidate : results) {
-        auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, maxEdits);
+        auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, *maxEdits);
         bool ok = false;
         for (auto& st : allStats) {
             if (st.substitution <= maxSubstitution
@@ -399,6 +402,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
         int maxSubstitution,
         int maxInsertion,
         int maxDeletion,
+        std::optional<int> maxEdits,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
 
@@ -416,6 +420,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
                                                 maxSubstitution,
                                                 maxInsertion,
                                                 maxDeletion,
+                                                maxEdits,
                                                 vGeneFilter,
                                                 jGeneFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
                                             return { query,
@@ -423,6 +428,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
                                                                       maxSubstitution,
                                                                       maxInsertion,
                                                                       maxDeletion,
+                                                                      maxEdits,
                                                                       vGeneFilter,
                                                                       jGeneFilter) };
                                         }));

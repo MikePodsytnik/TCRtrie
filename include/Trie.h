@@ -39,9 +39,10 @@ public:
                                                                      int maxEdits);
 
     std::vector<AIRREntity> SearchAIRR(const std::string& query,
-                                       int maxSubstitution,
-                                       int maxInsertion,
-                                       int maxDeletion,
+                                       int maxSubstitution = 0,
+                                       int maxInsertion = 0,
+                                       int maxDeletion = 0,
+                                       std::optional<int> maxEdits = std::nullopt,
                                        const std::optional<std::string>& vGeneFilter = std::nullopt,
                                        const std::optional<std::string>& jGeneFilter = std::nullopt);
 
@@ -52,9 +53,10 @@ public:
     bool SearchAny(const std::string& query, int maxEdits);
 
     std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAll(const std::vector<std::string>& queries,
-                                                                          int maxSubstitution,
-                                                                          int maxInsertion,
-                                                                          int maxDeletion,
+                                                                          int maxSubstitution = 0,
+                                                                          int maxInsertion = 0,
+                                                                          int maxDeletion = 0,
+                                                                          std::optional<int> maxEdits = std::nullopt,
                                                                           const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                           const std::optional<std::string>& jGeneFilter = std::nullopt);
 
