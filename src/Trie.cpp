@@ -603,6 +603,7 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     std::unordered_map<char, std::unordered_map<char, float>> rawScores;
     bool isCostMatrix = true;
+    bool isDiagonalMatrix = true;
     rawScores['-']['-'] = fabs(deletionScore_);
     for (char r : letters) {
         rawScores[r]['-']=deletionScore_;
@@ -613,7 +614,8 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
             file >> v;
             rawScores[r][c] = v;
             rawScores[c][r] = v;
-            if (v > 1e-6f) { isCostMatrix = false; }
+            if (v < 0) { isCostMatrix = false; }
+            if (r == c && v != 0) { isDiagonalMatrix = false; }
         }
     }
     deletionScore_ = rawScores['-']['-'];
@@ -622,7 +624,7 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     substitutionMatrix_.clear();
 
-    if (isCostMatrix) {
+    if (isCostMatrix && isDiagonalMatrix) {
         substitutionMatrix_ = rawScores;
     } else {
         for (char r : letters) {
@@ -630,6 +632,16 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
                 float cost = (rawScores[r][r] + rawScores[c][c]) * 0.5f
                              - rawScores[r][c];
                 substitutionMatrix_[r][c] = cost;
+            }
+        }
+    }
+
+    for (char r : letters) {
+        for (char c : letters) {
+            if (substitutionMatrix_[r][c] < 0) {
+                std::cerr << "Negative cost in substitution matrix: "
+                          << r << " vs " << c << " = "
+                          << substitutionMatrix_[r][c] << std::endl;
             }
         }
     }

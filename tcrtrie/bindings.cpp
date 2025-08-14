@@ -149,5 +149,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
 
             .def("SetMaxQueryLength", &Trie::SetMaxQueryLength, py::arg("newMaxQueryLength"))
 
-            .def("SetDeletionScore", &Trie::SetDeletionScore, py::arg("deletionScore"));
+            .def("SetDeletionScore", &Trie::SetDeletionScore, py::arg("deletionScore"))
+
+            .def("PrintMatrix", &Trie::PrintMatrix);
 }
