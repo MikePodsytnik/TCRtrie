@@ -11,7 +11,7 @@
 class Trie {
 public:
     struct TrieNode {
-        std::array<TrieNode*, 30> children{};
+        std::unordered_map<char, TrieNode*> children;
         std::vector<int> indices;
     };
 

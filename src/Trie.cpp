@@ -223,11 +223,7 @@ void Trie::SearchRecursiveAIRR(const std::string& query, int maxEdits,
     int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
     if (minVal > maxEdits) return;
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (child == nullptr) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<int> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + 1;
         for (int j = 1; j <= queryLength; ++j) {
@@ -290,11 +286,7 @@ void Trie::SearchRecursiveCost(const std::string& query, float maxCost,
         }
     }
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (!child) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<float> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + substitutionMatrix_.at('-').at(letter);
         float minVal = nextRow[0];
@@ -352,11 +344,7 @@ void Trie::SearchRecursive(const std::string& query, int maxEdits, const std::st
     int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
     if (minVal > maxEdits) return;
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (child == nullptr) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<int> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + 1;
         for (int j = 1; j <= queryLength; ++j) {
@@ -512,11 +500,7 @@ bool Trie::SearchAnyRecursive(const std::string& query, int maxEdits,
     int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
     if (minVal > maxEdits) return false;
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (child == nullptr) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<int> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + 1;
 
@@ -552,11 +536,10 @@ void Trie::BuildTrie() {
         TrieNode* node = root_;
         for (char c : seq) {
             if (c < 'A' || c > 'Z') continue;
-            int i = c - 'A';
-            if (!node->children[i]) {
-                node->children[i] = new TrieNode();
+            if (node->children.find(c) == node->children.end()) {
+                node->children[c] = new TrieNode();
             }
-            node = node->children[i];
+            node = node->children[c];
         }
         node->indices.push_back(idx);
     }
@@ -564,9 +547,10 @@ void Trie::BuildTrie() {
 
 void Trie::DeleteTrie(TrieNode* node) {
     if (!node) return;
-    for (TrieNode* childNode : node->children) {
+    for (auto& [letter, childNode] : node->children) {
         DeleteTrie(childNode);
     }
+
     delete node;
 }
 
@@ -575,11 +559,8 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
 
     TrieNode* newNode = new TrieNode();
     newNode->indices = node->indices;
-
-    for (size_t i = 0; i < node->children.size(); ++i) {
-        if (node->children[i]) {
-            newNode->children[i] = CopyTrie(node->children[i]);
-        }
+    for (const auto& [letter, childNode] : node->children) {
+        newNode->children[letter] = CopyTrie(childNode);
     }
 
     return newNode;
