@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <future>
 #include <iomanip>
@@ -438,7 +439,6 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
         float maxCost,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
-
     std::unordered_map<std::string, std::vector<AIRREntity>> result;
     std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
 
@@ -467,6 +467,100 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
     for (auto& fut : futures) {
         auto [query, matches] = fut.get();
         result[query] = std::move(matches);
+    }
+
+    return result;
+}
+
+std::unordered_set<AIRREntity> Trie::ClusterUsage(const std::vector<std::string>& cluster,
+                                                  int maxSubstitution,
+                                                  int maxInsertion,
+                                                  int maxDeletion,
+                                                  std::optional<int> maxEdits,
+                                                  const std::optional<std::string>& vGeneFilter,
+                                                  const std::optional<std::string>& jGeneFilter) {
+    std::unordered_set<AIRREntity> result;
+    std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
+
+    std::size_t maxConcurrent = 10 * std::thread::hardware_concurrency();
+
+    for (std::size_t i = 0; i < cluster.size(); ++i) {
+        const std::string& query = cluster[i];
+
+        futures.push_back(std::async(std::launch::async,
+                                     [this, query,
+                                             maxSubstitution,
+                                             maxInsertion,
+                                             maxDeletion,
+                                             maxEdits,
+                                             vGeneFilter,
+                                             jGeneFilter]() {
+                                         return std::make_pair(query, this->SearchAIRR(query,
+                                                                                       maxSubstitution,
+                                                                                       maxInsertion,
+                                                                                       maxDeletion,
+                                                                                       maxEdits,
+                                                                                       vGeneFilter,
+                                                                                       jGeneFilter));
+                                     }));
+
+        if (futures.size() >= maxConcurrent || i == cluster.size() - 1) {
+            for (std::future<std::pair<std::string, std::vector<AIRREntity>>>& fut : futures) {
+                std::pair<std::string, std::vector<AIRREntity>> completed = fut.get();
+                for (auto& entity : completed.second)
+                result.insert(std::move(entity));
+            }
+            futures.clear();
+        }
+    }
+
+    for (auto& fut : futures) {
+        auto [query, matches] = fut.get();
+        for (auto& entity : matches)
+            result.insert(std::move(entity));
+    }
+
+    return result;
+}
+
+std::unordered_set<AIRREntity> Trie::ClusterUsageWithMatrix(const std::vector<std::string>& cluster,
+                                                  float maxCost,
+                                                  const std::optional<std::string>& vGeneFilter,
+                                                  const std::optional<std::string>& jGeneFilter) {
+    std::unordered_set<AIRREntity> result;
+    std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
+
+    std::size_t maxConcurrent = 10 * std::thread::hardware_concurrency();
+
+    for (std::size_t i = 0; i < cluster.size(); ++i) {
+        const std::string& query = cluster[i];
+
+        futures.push_back(std::async(std::launch::async,
+                                     [this,
+                                      query,
+                                      maxCost,
+                                      vGeneFilter,
+                                      jGeneFilter]() {
+                                         return std::make_pair(query, this->SearchWithMatrix(query,
+                                                                                             maxCost,
+                                                                                             vGeneFilter,
+                                                                                             jGeneFilter));
+                                     }));
+
+        if (futures.size() >= maxConcurrent || i == cluster.size() - 1) {
+            for (std::future<std::pair<std::string, std::vector<AIRREntity>>>& fut : futures) {
+                std::pair<std::string, std::vector<AIRREntity>> completed = fut.get();
+                for (auto& entity : completed.second)
+                    result.insert(std::move(entity));
+            }
+            futures.clear();
+        }
+    }
+
+    for (auto& fut : futures) {
+        auto [query, matches] = fut.get();
+        for (auto& entity : matches)
+            result.insert(std::move(entity));
     }
 
     return result;

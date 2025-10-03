@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Trie {
@@ -64,6 +65,19 @@ public:
                                                                                     float maxCost,
                                                                                     const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                                     const std::optional<std::string>& jGeneFilter = std::nullopt);
+
+    std::unordered_set<AIRREntity> ClusterUsageWithMatrix(const std::vector<std::string>& cluster,
+                                                          float maxCost,
+                                                          const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                                          const std::optional<std::string>& jGeneFilter = std::nullopt);
+
+    std::unordered_set<AIRREntity> ClusterUsage(const std::vector<std::string>& cluster,
+                                                int maxSubstitution = 0,
+                                                int maxInsertion = 0,
+                                                int maxDeletion = 0,
+                                                std::optional<int> maxEdits = std::nullopt,
+                                                const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                                const std::optional<std::string>& jGeneFilter = std::nullopt);
 
     void LoadSubstitutionMatrix(const std::string& matrixPath);
 

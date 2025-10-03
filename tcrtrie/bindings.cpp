@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 #include "Trie.h"
+#include "AirrParser.h"
 
 namespace py = pybind11;
 
@@ -141,6 +142,51 @@ PYBIND11_MODULE(_tcrtrie, m) {
                                              jGeneFilter);
                  },
                  py::arg("queries"),
+                 py::arg("maxCost"),
+                 py::arg("vGeneFilter") = std::nullopt,
+                 py::arg("jGeneFilter") = std::nullopt)
+
+            .def("ClusterUsage",
+                 [](Trie &self,
+                    const std::vector<std::string> &cluster,
+                    int maxSubstitution,
+                    int maxInsertion,
+                    int maxDeletion,
+                    std::optional<int> maxEdits,
+                    const std::optional<std::string> &vGeneFilter,
+                    const std::optional<std::string> &jGeneFilter) {
+                     return call_without_gil(&Trie::ClusterUsage,
+                                             &self,
+                                             cluster,
+                                             maxSubstitution,
+                                             maxInsertion,
+                                             maxDeletion,
+                                             maxEdits,
+                                             vGeneFilter,
+                                             jGeneFilter);
+                 },
+                 py::arg("cluster"),
+                 py::arg("maxSubstitution") = 0,
+                 py::arg("maxInsertion") = 0,
+                 py::arg("maxDeletion") = 0,
+                 py::arg("maxEdits") = std::nullopt,
+                 py::arg("vGeneFilter") = std::nullopt,
+                 py::arg("jGeneFilter") = std::nullopt)
+
+            .def("ClusterUsageWithMatrix",
+                 [](Trie &self,
+                    const std::vector<std::string> &cluster,
+                    float maxCost,
+                    const std::optional<std::string> &vGeneFilter,
+                    const std::optional<std::string> &jGeneFilter) {
+                     return call_without_gil(&Trie::ClusterUsageWithMatrix,
+                                             &self,
+                                             cluster,
+                                             maxCost,
+                                             vGeneFilter,
+                                             jGeneFilter);
+                 },
+                 py::arg("cluster"),
                  py::arg("maxCost"),
                  py::arg("vGeneFilter") = std::nullopt,
                  py::arg("jGeneFilter") = std::nullopt)
