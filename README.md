@@ -25,8 +25,8 @@
 ### Install from GitHub
 
 ```r
-install.packages("devtools")
-devtools::install_github("MikePodsytnik/TCRtrie", ref = "0.1.0-tcrtrieR", subdir = "tcrtrieR")
+install.packages("remotes")
+remotes::install_github("MikePodsytnik/TCRtrie", ref = "0.1.0-tcrtrieR")
 
 ```
 
