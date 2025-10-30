@@ -25,7 +25,6 @@
 ### Install from GitHub
 
 ```r
-R
 install.packages("devtools")
 devtools::install_github("MikePodsytnik/TCRtrie", ref = "0.1.0-tcrtrieR", subdir = "tcrtrieR")
 
