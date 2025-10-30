@@ -1,0 +1,13 @@
+Package: tcrtrieR
+Type: Package
+Title: R wrapper for TCRtrie approximate search
+Version: 0.1.0
+Author: Your Name
+Maintainer: Your Name <you@example.org>
+Description: R bindings to a C++ TCRtrie for approximate search over TCR CDR3 with Levenshtein or substitution-matrix costs.
+License: MIT + file LICENSE
+LinkingTo: Rcpp
+Imports: Rcpp
+SystemRequirements: C++17
+Encoding: UTF-8
+RoxygenNote: 7.3.2

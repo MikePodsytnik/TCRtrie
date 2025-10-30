@@ -1,0 +1,41 @@
+useDynLib(tcrtrieR, .registration=TRUE)
+importFrom(Rcpp, evalCpp)
+
+export(
+  build_trie_airr,
+  build_trie_strings,
+
+  trie_use_matrix,
+  trie_set_maxlen,
+  trie_print_matrix_df,
+
+  trie_search_leven,
+  trie_search_leven_any,
+  trie_search_leven_batch,
+
+  trie_search_airr_df,
+  trie_search_matrix_df,
+  trie_search_for_all_airr_df,
+  trie_search_for_all_matrix_df,
+
+  trie_cluster_usage_df,
+  trie_cluster_usage_matrix_df
+)
+
+export(
+  trie_create_from_airr,
+  trie_create_from_strings,
+  trie_load_subst_matrix,
+  trie_set_deletion_score,
+  trie_set_max_query_length,
+  trie_print_matrix,
+  trie_search,
+  trie_search_any,
+  trie_search_batch,
+  trie_search_airr,
+  trie_search_matrix,
+  trie_search_for_all_airr,
+  trie_search_for_all_matrix,
+  trie_cluster_usage,
+  trie_cluster_usage_matrix
+)

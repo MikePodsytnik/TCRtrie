@@ -1,143 +1,171 @@
-# TCRtrie: Trie-Based Neighboring CDR3 Sequences Search
+# TCRtrieR: Fast R Bindings for TCR Sequence Matching with Trie
 
-TCRtrie is a C++ library and command-line tool for approximate matching of T-cell receptor (TCR) sequences using a trie (prefix tree) data structure. This tool is designed for efficient similarity search in large TCR repertoire datasets, enabling researchers to quickly identify sequences that match a given query within a specified error threshold.
+`tcrtrieR` provides R bindings for the C++ **TCRtrie** library, enabling fast approximate matching and similarity search over T‑cell receptor (TCR) CDR3 sequences using a trie (prefix tree) data structure. Searches can be performed with Levenshtein-style edit limits or with substitution matrices (e.g., BLOSUM), and can be filtered by V/J genes.
+
+---
 
 ## Overview
 
-Defining and measuring similarity between TCR sequences is challenging due to the immense diversity of CDR3 sequences. TCRtrie addresses this problem by:
-- Building a **trie** from a set of CDR3 sequences (AIRR format).
-- Employing a dynamic programming approach (based on **Levenshtein** distance) or **substitution matrix** scoring to perform approximate searches.
-- Utilizing multithreading to accelerate batch search operations.
-- Supporting gene-based filtering (e.g., `v_call`, `j_call`) via CLI.
+`tcrtrieR` helps analyze TCR repertoires by:
+- Building a trie index from an AIRR TSV or from vectors of CDR3 sequences (optionally with V and J metadata).
+- Performing approximate matching with per‑operation limits (substitutions/insertions/deletions).
+- Using substitution matrices with configurable deletion (gap) penalties.
+- Filtering by **V** and **J** gene segments.
+- Running batch searches with parallel execution underneath.
 
-## Functional
-
-### SearchAIRR
-
-**Description:** This method implements a generalized Levenshtein distance where insertions, deletions, and substitutions are tracked separately and contribute equally to the total edit cost.
-
-### SearchWithMatrix
-
-**Description:** Searches using a substitution matrix with cost threshold `maxCost`. Optional filtering by V and J genes.
-
-### SearchAny
-
-**Description:** Returns `true` if at least one sequence satisfies the approximate match condition with the given query.
-
-### SearchForAll
-
-**Description:** Performs multithreaded search for all queries with Levenshtein distance. Optional gene filtering.
-
-### SearchForAllWithMatrix
-
-**Description:** Performs multithreaded search using a substitution matrix and cost threshold. Filters supported.
-
-### LoadSubstitutionMatrix
-
-**Description:** Loads a substitution matrix and converts it to a cost matrix for use in matrix-based search.
-
-### SetMaxQueryLength
-
-**Description:** Sets the maximum allowed query length (default is 32).
-### CLI Interface
-
-The project includes a command-line tool built with [CLI11](https://github.com/CLIUtils/CLI11). Example usage:
-
-```sh
-./TCRtrie \
-  --trie data/vdjdb.tsv \
-  -q CASSLGTDGYTF \
-  --sub 3 \
-  --ins 1 \
-  --del 1 \
-  --v-gene TRBV7-9 \
-  --j-gene TRBJ2-1 \
-  -o output/
-```
-
-| Flag                     | Description                                                                  |
-|--------------------------|------------------------------------------------------------------------------|
-| `-t, --trie <path>`      | Path to the AIRR TSV file containing the repertoire to search (**required**) |
-| `-q, --query <sequence>` | Single query sequence                                                        |
-| `--input-queries <path>` | AIRR TSV file with multiple queries (batch search)                           |
-| `-s, --sub <int>`        | Max allowed number of substitutions                                          |
-| `-i,--ins <int>`         | Max allowed number of inserts                                                |
-| `-d,--del <int>`         | Max allowed number of deletions                                              |
-| `--matrix-search <path>` | Path to substitution matrix file                                             |
-| `--cost-radius <float>`  | Cost threshold for changes when using matrix search                          |
-| `--v-gene <name>`        | Optional filter by V-gene name                                               |
-| `--j-gene <name>`        | Optional filter by J-gene name                                               |
-| `-o, --output <dir>`     | Output folder (default: current directory)                                   |
+---
 
 ## Installation
 
 ### Requirements
-- **C++ Compiler:** C++17+
-- **CMake:** Build system
+- **R ≥ 4.2**
+- A C++17 toolchain (clang or gcc)
+- R packages: `Rcpp`, `devtools` (installed automatically if missing)
 
-### Build Instructions
-```sh
-git clone https://github.com/MikePodsytnik/TCRtrie.git
-cd TCRtrie
-mkdir build && cd build
-cmake ..
-make
+### Install from GitHub
+
+```r
+install.packages("devtools")
+devtools::install_github("MikePodsytnik/TCRtrie", ref = "0.1.0-tcrtrieR", subdir = "tcrtrieR")
+
 ```
 
-## How It Works
+### Install from cloned sources
 
-1. **Trie Construction:**  
-   The trie is built from a list of TCR sequences (patterns). Each node in the trie contains:
-    - A fixed-size array of child pointers (for letters 'A' to 'Z', adjusted for the alphabet used).
-    - A list of indices corresponding to the patterns that terminate at that node.
+```bash
+git clone https://github.com/MikePodsytnik/tcrtrieR.git
+cd tcrtrieR
 
-2. **Approximate SearchAIRR:**  
-   When a query is executed:
-    - The algorithm initializes a row of edit distances.
-    - A recursive search traverses the trie, computing the Levenshtein distance for each node. As a result, instead of the conventional two-dimensional dynamic programming matrix, a branched, multi-dimensional matrix is obtained.
-    - If a node’s computed distance is within the allowed maximum edits, the corresponding CDR3 sequences are returned.
+R -q -e "Rcpp::compileAttributes('.')"
 
-3. **Multithreaded Batch Processing:**  
-   The `SearchForAll` function uses C++ standard threading (`std::async` and `std::future`) to process multiple queries in parallel, improving performance on multi-core systems.
-### Input Format
-
-Input files must conform to the AIRR standard (TSV) and contain at least the column `junction_aa`. Columns `v_call` and `j_call` are optional, but if any line includes one of them, all lines must include it.
-
-Example:
+R CMD INSTALL .
 ```
-junction_aa	v_call	j_call
-CASSLGTDGYTF	TRBV7-9	TRBJ2-1
+
+---
+
+## R API Usage
+
+```r
+library(tcrtrieR)
+
+# Build Trie from AIRR TSV (expects columns: junction_aa, v_call, j_call)
+tr <- build_trie_airr("vdjdb_airr.tsv")
+
+# Levenshtein-based AIRR search with per-operation limits and V/J filters
+airr_results <- trie_search_airr_df(
+  tr,
+  query    = "CASSEGTDGYTF",
+  max_sub  = 2,
+  max_ins  = 1,
+  max_del  = 1,
+  v_filter = "TRBV4-1*01",
+  j_filter = "TRBJ1-2*01"
+)
+
+# Print results (junction AA, V, J, distance)
+for (i in seq_len(nrow(airr_results))) {
+  cat(
+    airr_results$junction_aa[i], " ",
+    airr_results$v_call[i], " ",
+    airr_results$j_call[i], " ",
+    airr_results$distance[i], "
+"
+  )
+}
+```
+
+### Example: Substitution Matrix
+
+```r
+library(tcrtrieR)
+
+tr <- build_trie_airr("vdjdb_airr.tsv")
+
+# Load a BLOSUM-like matrix and configure deletion score if the matrix lacks a gap column
+trie_use_matrix(tr, "blosum.txt", deletion_score = -5)
+
+matrix_results <- trie_search_matrix_df(
+  tr,
+  query    = "CASSLATDGYTF",
+  max_cost = 5.0,
+  v_filter = "TRBV5-6*01",
+  j_filter = "TRBJ1-2*01"
+)
+
+head(matrix_results)
+```
+
+---
+
+## Key Functions
+
+- `build_trie_airr(path)`  
+  Build a Trie index from an AIRR TSV file (columns: `junction_aa`, `v_call`, `j_call`).
+
+- `build_trie_strings(seqs, v_genes = NULL, j_genes = NULL)`  
+  Build from vectors; `v_genes` and `j_genes` are optional vectors of the same length as `seqs`.
+
+- `trie_search_leven(trie, query, max_edits)`  
+  Simple Levenshtein search returning matching CDR3 strings.
+
+- `trie_search_airr_df(trie, query, max_sub, max_ins, max_del, max_edits = NULL, v_filter = NULL, j_filter = NULL)`  
+  AIRR-aware search returning a `data.frame` with `junction_aa`, `v_call`, `j_call`, `distance`.
+
+- `trie_search_matrix_df(trie, query, max_cost, v_filter = NULL, j_filter = NULL)`  
+  Search using a substitution matrix (cost threshold). Returns a `data.frame`.
+
+- `trie_search_for_all_airr_df(trie, queries, ...)`  
+  Batch AIRR search for multiple queries; returns a named list of `data.frame`s.
+
+- `trie_search_for_all_matrix_df(trie, queries, ...)`  
+  Batch search with a substitution matrix; returns a named list of `data.frame`s.
+
+- `trie_cluster_usage_df(trie, cluster, max_sub, max_ins, max_del, ...)`  
+  Return all AIRR records matched to the provided cluster (as a `data.frame`).
+
+- `trie_use_matrix(trie, matrix_path, deletion_score = NULL)`  
+  Load a substitution matrix and optionally set a deletion (gap) penalty used in matrix-based search.
+
+- `trie_set_maxlen(trie, n)`  
+  Set the maximum allowed query length (default is 32).
+
+---
+
+## Substitution Matrix Format
+
+Matrix files should follow a BLOSUM-like layout, optionally including a first row/column for gaps `-`:
+
+```
+    -   A    C    D    E
+-  -3 -0.8 -0.7 -1.3 -0.1
+A   2.0 0.3 -1.1 -2.7 -1.4
+C   0.3 2.3  1.0 -1.1  0.2
 ...
 ```
 
-### Substitution Matrix Format
+If the matrix does not define a gap row/column, use `trie_use_matrix(tr, path, deletion_score = <value>)` to configure the deletion (gap) cost.
 
-If you are using `--matrix_search`, the matrix file should follow a **BLOSUM-like format**:
-- The first line contains amino acid letters (space-separated).
-- Each following line begins with a row letter and contains float substitution scores (space-separated).
+---
 
-Example:
-```
-  A   C   D   E   F
-A 2.0 0.3 -1.1 -2.7 -1.4
-C 0.3 2.3  1.0 -1.1  0.2
-...
-```
-The program will automatically convert this score matrix into a cost matrix (by subtracting each score from the maximum).
-All amino acids in the matrix must be single uppercase letters and symmetric across rows and columns.
+## Notes
 
-### Output Format
+- Default `maxQueryLength` is **32**; increase it via `trie_set_maxlen(tr, new_limit)` if needed.
+- Batch functions (`trie_search_for_all_*`) utilize parallel execution via `std::async` internally.
+- The package is implemented in C++17 and bound to R via [Rcpp](https://cran.r-project.org/package=Rcpp).
 
-Results are saved in a `.tsv` file with at least the following columns:
-```
-query	match
-```
-If `v_gene` or `j_gene` information is present in the match entries, additional columns will be included:
-```
-query	match	v_gene	j_gene
-```
+---
+
+## Troubleshooting
+
+- `Rcpp.h: No such file or directory` → Install `Rcpp` (`install.packages("Rcpp")`) and reinstall the package.
+- `Illegal instruction` on execution → Reinstall without CPU‑specific flags (ensure `TCRTRIER_FASTMATH` is unset).
+- Windows toolchain issues → Install **Rtools** for your R version and verify with `pkgbuild::has_build_tools()`.
+
+---
 
 ## Contributing
-If you encounter any bugs or have suggestions for improvements, please create an issue or submit a pull request on GitHub.
 
-<!-- google-site-verification=qb-RSAA0xaJ9UQzD6n9_968b_5HRvtJFQgp1Iyy4sOg -->
+Issues and pull requests are welcome at: https://github.com/MikePodsytnik/tcrtrieR
+
+---
+

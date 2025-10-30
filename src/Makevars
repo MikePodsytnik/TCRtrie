@@ -1,0 +1,19 @@
+CXX_STD = CXX17
+PKG_CPPFLAGS = -I../inst/include
+PKG_CXXFLAGS = -O2
+
+MARCH_NATIVE_SUPPORTED := $(shell $(CXX) -march=native -E -x c++ - </dev/null >/dev/null 2>&1 && echo yes || echo no)
+ifeq ($(MARCH_NATIVE_SUPPORTED),yes)
+  PKG_CXXFLAGS += -march=native
+else
+  MCPU_NATIVE_SUPPORTED := $(shell $(CXX) -mcpu=native -E -x c++ - </dev/null >/dev/null 2>&1 && echo yes || echo no)
+  ifeq ($(MCPU_NATIVE_SUPPORTED),yes)
+    PKG_CXXFLAGS += -mcpu=native
+  endif
+endif
+
+ifeq ($(OS),Windows_NT)
+  # no pthread
+else
+  PKG_LIBS += -pthread
+endif

@@ -1,8 +1,9 @@
-#include "Trie.h"
+#include "../inst/include/Trie.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <future>
 #include <iomanip>
@@ -15,9 +16,13 @@ Trie::Trie(const std::string& dataPath) {
     BuildTrie();
 }
 
-Trie::Trie(const std::vector<std::string>& sequences)
-        : root_(new TrieNode()), sequences_(sequences)
-{
+Trie::Trie(const std::vector<std::string>& sequences,
+           const std::vector<std::string>& vGenes,
+           const std::vector<std::string>& jGenes) :
+        root_(new TrieNode()),
+        sequences_(sequences),
+        vGenes_(vGenes),
+        jGenes_(jGenes) {
     BuildTrie();
 }
 
@@ -155,9 +160,12 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
                                          int maxSubstitution,
                                          int maxInsertion,
                                          int maxDeletion,
+                                         std::optional<int> maxEdits,
                                          const std::optional<std::string>& vGeneFilter,
                                          const std::optional<std::string>& jGeneFilter) {
-    int maxEdits = maxSubstitution + maxInsertion + maxDeletion;
+    if (!maxEdits.has_value() || *maxEdits < 0) {
+        maxEdits = maxSubstitution + maxInsertion + maxDeletion;
+    }
     std::vector<AIRREntity> results;
     int queryLength = query.size();
 
@@ -171,10 +179,10 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
         initialRow[i] = i;
     }
 
-    SearchRecursiveAIRR(query, maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
+    SearchRecursiveAIRR(query, *maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
     std::vector<AIRREntity> finalResult;
     for (const auto& candidate : results) {
-        auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, maxEdits);
+        auto allStats = DetailedLevenshteinAll(query, candidate.junctionAA, *maxEdits);
         bool ok = false;
         for (auto& st : allStats) {
             if (st.substitution <= maxSubstitution
@@ -216,11 +224,7 @@ void Trie::SearchRecursiveAIRR(const std::string& query, int maxEdits,
     int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
     if (minVal > maxEdits) return;
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (child == nullptr) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<int> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + 1;
         for (int j = 1; j <= queryLength; ++j) {
@@ -283,11 +287,7 @@ void Trie::SearchRecursiveCost(const std::string& query, float maxCost,
         }
     }
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (!child) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<float> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + substitutionMatrix_.at('-').at(letter);
         float minVal = nextRow[0];
@@ -345,11 +345,7 @@ void Trie::SearchRecursive(const std::string& query, int maxEdits, const std::st
     int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
     if (minVal > maxEdits) return;
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (child == nullptr) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<int> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + 1;
         for (int j = 1; j <= queryLength; ++j) {
@@ -395,6 +391,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
         int maxSubstitution,
         int maxInsertion,
         int maxDeletion,
+        std::optional<int> maxEdits,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
 
@@ -412,6 +409,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
                                                 maxSubstitution,
                                                 maxInsertion,
                                                 maxDeletion,
+                                                maxEdits,
                                                 vGeneFilter,
                                                 jGeneFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
                                             return { query,
@@ -419,6 +417,7 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
                                                                       maxSubstitution,
                                                                       maxInsertion,
                                                                       maxDeletion,
+                                                                      maxEdits,
                                                                       vGeneFilter,
                                                                       jGeneFilter) };
                                         }));
@@ -440,7 +439,6 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
         float maxCost,
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter) {
-
     std::unordered_map<std::string, std::vector<AIRREntity>> result;
     std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
 
@@ -474,6 +472,100 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
     return result;
 }
 
+std::unordered_set<AIRREntity> Trie::ClusterUsage(const std::vector<std::string>& cluster,
+                                                  int maxSubstitution,
+                                                  int maxInsertion,
+                                                  int maxDeletion,
+                                                  std::optional<int> maxEdits,
+                                                  const std::optional<std::string>& vGeneFilter,
+                                                  const std::optional<std::string>& jGeneFilter) {
+    std::unordered_set<AIRREntity> result;
+    std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
+
+    std::size_t maxConcurrent = 10 * std::thread::hardware_concurrency();
+
+    for (std::size_t i = 0; i < cluster.size(); ++i) {
+        const std::string& query = cluster[i];
+
+        futures.push_back(std::async(std::launch::async,
+                                     [this, query,
+                                             maxSubstitution,
+                                             maxInsertion,
+                                             maxDeletion,
+                                             maxEdits,
+                                             vGeneFilter,
+                                             jGeneFilter]() {
+                                         return std::make_pair(query, this->SearchAIRR(query,
+                                                                                       maxSubstitution,
+                                                                                       maxInsertion,
+                                                                                       maxDeletion,
+                                                                                       maxEdits,
+                                                                                       vGeneFilter,
+                                                                                       jGeneFilter));
+                                     }));
+
+        if (futures.size() >= maxConcurrent || i == cluster.size() - 1) {
+            for (std::future<std::pair<std::string, std::vector<AIRREntity>>>& fut : futures) {
+                std::pair<std::string, std::vector<AIRREntity>> completed = fut.get();
+                for (auto& entity : completed.second)
+                    result.insert(std::move(entity));
+            }
+            futures.clear();
+        }
+    }
+
+    for (auto& fut : futures) {
+        auto [query, matches] = fut.get();
+        for (auto& entity : matches)
+            result.insert(std::move(entity));
+    }
+
+    return result;
+}
+
+std::unordered_set<AIRREntity> Trie::ClusterUsageWithMatrix(const std::vector<std::string>& cluster,
+                                                            float maxCost,
+                                                            const std::optional<std::string>& vGeneFilter,
+                                                            const std::optional<std::string>& jGeneFilter) {
+    std::unordered_set<AIRREntity> result;
+    std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
+
+    std::size_t maxConcurrent = 10 * std::thread::hardware_concurrency();
+
+    for (std::size_t i = 0; i < cluster.size(); ++i) {
+        const std::string& query = cluster[i];
+
+        futures.push_back(std::async(std::launch::async,
+                                     [this,
+                                             query,
+                                             maxCost,
+                                             vGeneFilter,
+                                             jGeneFilter]() {
+                                         return std::make_pair(query, this->SearchWithMatrix(query,
+                                                                                             maxCost,
+                                                                                             vGeneFilter,
+                                                                                             jGeneFilter));
+                                     }));
+
+        if (futures.size() >= maxConcurrent || i == cluster.size() - 1) {
+            for (std::future<std::pair<std::string, std::vector<AIRREntity>>>& fut : futures) {
+                std::pair<std::string, std::vector<AIRREntity>> completed = fut.get();
+                for (auto& entity : completed.second)
+                    result.insert(std::move(entity));
+            }
+            futures.clear();
+        }
+    }
+
+    for (auto& fut : futures) {
+        auto [query, matches] = fut.get();
+        for (auto& entity : matches)
+            result.insert(std::move(entity));
+    }
+
+    return result;
+}
+
 bool Trie::SearchAny(const std::string& query, int maxEdits) {
     int queryLength = query.size();
     if (queryLength > maxQueryLength_) {
@@ -502,11 +594,7 @@ bool Trie::SearchAnyRecursive(const std::string& query, int maxEdits,
     int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
     if (minVal > maxEdits) return false;
 
-    for (int i = 0; i < node->children.size(); ++i) {
-        TrieNode* child = node->children[i];
-        if (child == nullptr) continue;
-        char letter = 'A' + i;
-
+    for (const auto& [letter, child] : node->children) {
         std::vector<int> nextRow(maxQueryLength_ + 1);
         nextRow[0] = currentRow[0] + 1;
 
@@ -542,11 +630,10 @@ void Trie::BuildTrie() {
         TrieNode* node = root_;
         for (char c : seq) {
             if (c < 'A' || c > 'Z') continue;
-            int i = c - 'A';
-            if (!node->children[i]) {
-                node->children[i] = new TrieNode();
+            if (node->children.find(c) == node->children.end()) {
+                node->children[c] = new TrieNode();
             }
-            node = node->children[i];
+            node = node->children[c];
         }
         node->indices.push_back(idx);
     }
@@ -554,9 +641,10 @@ void Trie::BuildTrie() {
 
 void Trie::DeleteTrie(TrieNode* node) {
     if (!node) return;
-    for (TrieNode* childNode : node->children) {
+    for (auto& [letter, childNode] : node->children) {
         DeleteTrie(childNode);
     }
+
     delete node;
 }
 
@@ -565,11 +653,8 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
 
     TrieNode* newNode = new TrieNode();
     newNode->indices = node->indices;
-
-    for (size_t i = 0; i < node->children.size(); ++i) {
-        if (node->children[i]) {
-            newNode->children[i] = CopyTrie(node->children[i]);
-        }
+    for (const auto& [letter, childNode] : node->children) {
+        newNode->children[letter] = CopyTrie(childNode);
     }
 
     return newNode;
@@ -593,6 +678,7 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     std::unordered_map<char, std::unordered_map<char, float>> rawScores;
     bool isCostMatrix = true;
+    bool isDiagonalMatrix = true;
     rawScores['-']['-'] = fabs(deletionScore_);
     for (char r : letters) {
         rawScores[r]['-']=deletionScore_;
@@ -603,7 +689,8 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
             file >> v;
             rawScores[r][c] = v;
             rawScores[c][r] = v;
-            if (v > 1e-6f) { isCostMatrix = false; }
+            if (v < 0) { isCostMatrix = false; }
+            if (r == c && v != 0) { isDiagonalMatrix = false; }
         }
     }
     deletionScore_ = rawScores['-']['-'];
@@ -612,7 +699,7 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
 
     substitutionMatrix_.clear();
 
-    if (isCostMatrix) {
+    if (isCostMatrix && isDiagonalMatrix) {
         substitutionMatrix_ = rawScores;
     } else {
         for (char r : letters) {
@@ -624,10 +711,17 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
         }
     }
 
-    useSubstitutionMatrix_ = true;
+    for (char r : letters) {
+        for (char c : letters) {
+            if (substitutionMatrix_[r][c] < 0) {
+                std::cerr << "Negative cost in substitution matrix: "
+                          << r << " vs " << c << " = "
+                          << substitutionMatrix_[r][c] << std::endl;
+            }
+        }
+    }
 
-    std::cout << "Substitution-Score Matrix:" << std::endl;
-    PrintMatrix();
+    useSubstitutionMatrix_ = true;
 }
 
 void Trie::PrintMatrix() {

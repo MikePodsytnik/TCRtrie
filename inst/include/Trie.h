@@ -6,12 +6,13 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Trie {
 public:
     struct TrieNode {
-        std::array<TrieNode*, 30> children{};
+        std::unordered_map<char, TrieNode*> children;
         std::vector<int> indices;
     };
 
@@ -22,9 +23,11 @@ public:
         int substitution;
     };
 
-    explicit Trie(const std::vector<std::string>& sequences);
     explicit Trie(const std::string& dataPath);
-    Trie();
+    explicit Trie(const std::vector<std::string>& sequences,
+                  const std::vector<std::string>& vGenes,
+                  const std::vector<std::string>& jGenes);
+    explicit Trie();
     Trie(const Trie& other);
     Trie& operator=(const Trie& other);
     Trie(Trie&& other) noexcept;
@@ -37,9 +40,10 @@ public:
                                                                      int maxEdits);
 
     std::vector<AIRREntity> SearchAIRR(const std::string& query,
-                                       int maxSubstitution,
-                                       int maxInsertion,
-                                       int maxDeletion,
+                                       int maxSubstitution = 0,
+                                       int maxInsertion = 0,
+                                       int maxDeletion = 0,
+                                       std::optional<int> maxEdits = std::nullopt,
                                        const std::optional<std::string>& vGeneFilter = std::nullopt,
                                        const std::optional<std::string>& jGeneFilter = std::nullopt);
 
@@ -50,9 +54,10 @@ public:
     bool SearchAny(const std::string& query, int maxEdits);
 
     std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAll(const std::vector<std::string>& queries,
-                                                                          int maxSubstitution,
-                                                                          int maxInsertion,
-                                                                          int maxDeletion,
+                                                                          int maxSubstitution = 0,
+                                                                          int maxInsertion = 0,
+                                                                          int maxDeletion = 0,
+                                                                          std::optional<int> maxEdits = std::nullopt,
                                                                           const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                           const std::optional<std::string>& jGeneFilter = std::nullopt);
 
@@ -61,11 +66,26 @@ public:
                                                                                     const std::optional<std::string>& vGeneFilter = std::nullopt,
                                                                                     const std::optional<std::string>& jGeneFilter = std::nullopt);
 
+    std::unordered_set<AIRREntity> ClusterUsageWithMatrix(const std::vector<std::string>& cluster,
+                                                          float maxCost,
+                                                          const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                                          const std::optional<std::string>& jGeneFilter = std::nullopt);
+
+    std::unordered_set<AIRREntity> ClusterUsage(const std::vector<std::string>& cluster,
+                                                int maxSubstitution = 0,
+                                                int maxInsertion = 0,
+                                                int maxDeletion = 0,
+                                                std::optional<int> maxEdits = std::nullopt,
+                                                const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                                const std::optional<std::string>& jGeneFilter = std::nullopt);
+
     void LoadSubstitutionMatrix(const std::string& matrixPath);
 
     void SetDeletionScore(float deletionScore);
 
     void SetMaxQueryLength(int newMaxQueryLength);
+
+    void PrintMatrix();
 
 private:
     bool useSubstitutionMatrix_ = false;
@@ -84,8 +104,6 @@ private:
     TrieNode* CopyTrie(const TrieNode* node);
 
     void UpdateSubstitutionMatrix(float deletionScore);
-
-    void PrintMatrix();
 
     void SearchRecursive(const std::string& query, int maxEdits,
                          const std::string& currentPrefix, TrieNode* node,
