@@ -19,6 +19,7 @@ One can simply install the software out-of-the-box using [pip](https://pypi.org/
 conda create -n tcrtrie
 conda activate tcrtrie
 pip install git+https://github.com/MikePodsytnik/TCRtrie@0.1.0-tcrtriepy
+tcrtrie-vdjdb-update
 ```
 
 Or, in case of package version problems or other issues, clone the repository manually via git, create
@@ -31,6 +32,7 @@ conda create -n tcrtrie
 conda activate tcrtrie
 pip install --upgrade pip setuptools wheel scikit-build-core pybind11
 pip install .
+tcrtrie-vdjdb-update
 ```
 
 > For this method, ensure your system has a C++ Compiler supporting C++17 and CMake ≥ 3.16 installed

@@ -8,11 +8,11 @@ version = "0.1.0"
 description = "Python bindings for TCR trie search"
 requires-python = ">=3.8"
 
+[project.scripts]
+tcrtrie-vdjdb-update = "tcrtrie.vdjdb_cache:warmup_vdjdb_cache"
+
 [tool.scikit-build]
 wheel.packages = ["tcrtrie"]
 
 [tool.setuptools]
 include-package-data = true
-
-[tool.setuptools.package-data]
-"tcrtrie" = ["vdjdb_airr.tsv"]
