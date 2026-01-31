@@ -47,6 +47,14 @@ public:
                                        const std::optional<std::string>& vGeneFilter = std::nullopt,
                                        const std::optional<std::string>& jGeneFilter = std::nullopt);
 
+    std::vector<std::pair<size_t, int>> SearchIndices(const std::string& query,
+                                       int maxSubstitution = 0,
+                                       int maxInsertion = 0,
+                                       int maxDeletion = 0,
+                                       std::optional<int> maxEdits = std::nullopt,
+                                       const std::optional<std::string>& vGeneFilter = std::nullopt,
+                                       const std::optional<std::string>& jGeneFilter = std::nullopt);
+
     std::vector<AIRREntity> SearchWithMatrix(const std::string& query, float maxCost,
                                              const std::optional<std::string>& vGeneFilter = std::nullopt,
                                              const std::optional<std::string>& jGeneFilter = std::nullopt);
@@ -113,6 +121,12 @@ private:
     void SearchRecursiveAIRR(const std::string& query, int maxEdits,
                              TrieNode* node, std::vector<int>& prevRow, int queryLength,
                              std::vector<AIRREntity>& results,
+                             const std::optional<std::string>& vGeneFilter,
+                             const std::optional<std::string>& jGeneFilter);
+
+    void SearchRecursiveIDs(const std::string& query, int maxEdits,
+                             TrieNode* node, std::vector<int>& prevRow, int queryLength,
+                             std::vector<std::pair<size_t, int>>& results,
                              const std::optional<std::string>& vGeneFilter,
                              const std::optional<std::string>& jGeneFilter);
 

@@ -6,6 +6,7 @@ import os
 import pathlib
 import tarfile
 import urllib.request
+import sqlite3
 import zipfile
 from dataclasses import dataclass
 
@@ -171,13 +172,52 @@ def fetch_latest_vdjdb_txt(
     return canonical_txt, meta
 
 
-def vdjdb_txt_to_airr_minimal(
+def _extract_airr_triplet(row: dict[str, str]) -> tuple[str, str, str] | None:
+    cdr3 = (row.get("cdr3") or "").strip()
+    v = (row.get("v.segm") or "").strip()
+    j = (row.get("j.segm") or "").strip()
+    if not (cdr3 and v and j):
+        return None
+    return cdr3, v, j
+
+AIRR_FIELDS = ["junction_aa", "v_call", "j_call"]
+
+def _open_airr_writer(out_airr_tsv: pathlib.Path):
+    out_airr_tsv.parent.mkdir(parents=True, exist_ok=True)
+    fout = open(out_airr_tsv, "w", newline="", encoding="utf-8")
+    w = csv.DictWriter(fout, fieldnames=AIRR_FIELDS, delimiter="\t")
+    w.writeheader()
+    return fout, w
+
+def _write_airr_row(w: csv.DictWriter, cdr3: str, v: str, j: str) -> None:
+    w.writerow({"junction_aa": cdr3, "v_call": v, "j_call": j})
+
+def _init_vdjdb_sqlite(sqlite_path: pathlib.Path, cols: list[str]) -> sqlite3.Connection:
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(sqlite_path)
+    con.execute("PRAGMA journal_mode=WAL;")
+    con.execute("DROP TABLE IF EXISTS vdjdb;")
+
+    col_defs = ", ".join([f'"{c}" TEXT' for c in cols])
+    con.execute(f'CREATE TABLE vdjdb (idx INTEGER PRIMARY KEY, {col_defs});')
+    return con
+
+def _prepare_insert_sql(cols: list[str]) -> tuple[str, list[str]]:
+    col_list = ", ".join([f'"{c}"' for c in cols])
+    placeholders = ",".join(["?"] * (len(cols) + 1))
+    sql = f'INSERT INTO vdjdb (idx, {col_list}) VALUES ({placeholders});'
+    return sql, cols
+
+def _insert_full_row(con: sqlite3.Connection, insert_sql: str, idx: int, cols: list[str], row: dict[str, str]) -> None:
+    values = [row.get(c, "") for c in cols]
+    con.execute(insert_sql, [idx] + values)
+
+def vdjdb_txt_to_airr_and_sqlite(
         *,
         vdjdb_txt: pathlib.Path,
         out_airr_tsv: pathlib.Path,
+        out_sqlite: pathlib.Path,
 ) -> None:
-    out_airr_tsv.parent.mkdir(parents=True, exist_ok=True)
-
     with open(vdjdb_txt, "r", newline="", encoding="utf-8") as fin:
         reader = csv.DictReader(fin, delimiter="\t")
         if reader.fieldnames is None:
@@ -188,23 +228,26 @@ def vdjdb_txt_to_airr_minimal(
         if missing:
             raise VDJdbFormatError(f"vdjdb.txt missing columns: {sorted(missing)}")
 
-        fieldnames = ["junction_aa", "v_call", "j_call"]
+        cols = list(reader.fieldnames)
 
-        with open(out_airr_tsv, "w", newline="", encoding="utf-8") as fout:
-            writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter="\t")
-            writer.writeheader()
+        con = _init_vdjdb_sqlite(out_sqlite, cols)
+        try:
+            insert_sql, cols = _prepare_insert_sql(cols)
+            fout, w = _open_airr_writer(out_airr_tsv)
+            try:
+                idx = 0
+                for row in reader:
+                    triplet = _extract_airr_triplet(row)
+                    if triplet is None:
+                        continue
+                    cdr3, v, j = triplet
 
-            for row in reader:
-                cdr3 = (row["cdr3"] or "").strip()
-                v = (row["v.segm"] or "").strip()
-                j = (row["j.segm"] or "").strip()
-                if not (cdr3 and v and j):
-                    continue
+                    _write_airr_row(w, cdr3, v, j)
+                    _insert_full_row(con, insert_sql, idx, cols, row)
+                    idx += 1
+            finally:
+                fout.close()
 
-                writer.writerow(
-                    {
-                        "junction_aa": cdr3,
-                        "v_call": v,
-                        "j_call": j,
-                    }
-                )
+            con.commit()
+        finally:
+            con.close()

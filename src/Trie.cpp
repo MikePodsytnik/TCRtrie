@@ -238,6 +238,86 @@ void Trie::SearchRecursiveAIRR(const std::string& query, int maxEdits,
     }
 }
 
+std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query,
+                                         int maxSubstitution,
+                                         int maxInsertion,
+                                         int maxDeletion,
+                                         std::optional<int> maxEdits,
+                                         const std::optional<std::string>& vGeneFilter,
+                                         const std::optional<std::string>& jGeneFilter) {
+    if (!maxEdits.has_value() || *maxEdits < 0) {
+        maxEdits = maxSubstitution + maxInsertion + maxDeletion;
+    }
+    std::vector<std::pair<size_t, int>> results;
+    int queryLength = query.size();
+
+    if (queryLength > maxQueryLength_) {
+        std::cerr << query << " :query length exceeds maximum allowed length(" << maxQueryLength_ << ")" << std::endl;
+        return results;
+    }
+
+    std::vector<int> initialRow(maxQueryLength_ + 1);
+    for (int i = 0; i <= queryLength; ++i) {
+        initialRow[i] = i;
+    }
+
+    SearchRecursiveIDs(query, *maxEdits, root_, initialRow, queryLength, results, vGeneFilter, jGeneFilter);
+    std::vector<std::pair<size_t, int>> finalResult;
+    for (const auto& candidate : results) {
+        auto allStats = DetailedLevenshteinAll(query, sequences_[candidate.first], *maxEdits);
+        bool ok = false;
+        for (auto& st : allStats) {
+            if (st.substitution <= maxSubstitution
+                && st.insertion <= maxInsertion
+                && st.deletion <= maxDeletion) {
+                ok = true;
+                break;
+            }
+        }
+        if (ok) {
+            finalResult.push_back(candidate);
+        }
+    }
+
+    return finalResult;
+}
+
+void Trie::SearchRecursiveIDs(const std::string& query, int maxEdits,
+                               TrieNode* node, std::vector<int>& prevRow, int queryLength,
+                               std::vector<std::pair<size_t, int>>& results,
+                               const std::optional<std::string>& vGeneFilter,
+                               const std::optional<std::string>& jGeneFilter) {
+    std::vector<int> currentRow(maxQueryLength_ + 1);
+    std::copy(prevRow.begin(), prevRow.begin() + queryLength + 1, currentRow.begin());
+
+    if (!node->indices.empty() && currentRow[queryLength] <= maxEdits) {
+        for (int index : node->indices) {
+            bool vMatch = !vGeneFilter || vGenes_[index] == *vGeneFilter;
+            bool jMatch = !jGeneFilter || jGenes_[index] == *jGeneFilter;
+            if (vMatch && jMatch) {
+                results.emplace_back(index,
+                                     currentRow[queryLength]);
+            }
+        }
+    }
+
+    int minVal = *std::min_element(currentRow.begin(), currentRow.begin() + queryLength + 1);
+    if (minVal > maxEdits) return;
+
+    for (const auto& [letter, child] : node->children) {
+        std::vector<int> nextRow(maxQueryLength_ + 1);
+        nextRow[0] = currentRow[0] + 1;
+        for (int j = 1; j <= queryLength; ++j) {
+            int cost = (query[j - 1] == letter) ? 0 : 1;
+            nextRow[j] = std::min({ currentRow[j] + 1,
+                                    nextRow[j - 1] + 1,
+                                    currentRow[j - 1] + cost
+                                  });
+        }
+        SearchRecursiveIDs(query, maxEdits, child, nextRow, queryLength, results, vGeneFilter, jGeneFilter);
+    }
+}
+
 std::vector<AIRREntity> Trie::SearchWithMatrix(const std::string& query, float maxCost,
                                                const std::optional<std::string>& vGeneFilter,
                                                const std::optional<std::string>& jGeneFilter) {

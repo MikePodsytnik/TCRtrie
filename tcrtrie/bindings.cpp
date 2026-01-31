@@ -59,7 +59,34 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     std::optional<int> maxEdits,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
-                     return call_without_gil(&Trie::SearchAIRR,
+                    return call_without_gil(&Trie::SearchAIRR,
+                                             &self,
+                                             query,
+                                             maxSubstitution,
+                                             maxInsertion,
+                                             maxDeletion,
+                                             maxEdits,
+                                             vGeneFilter,
+                                             jGeneFilter);
+                 },
+                 py::arg("query"),
+                 py::arg("maxSubstitution") = 0,
+                 py::arg("maxInsertion") = 0,
+                 py::arg("maxDeletion") = 0,
+                 py::arg("maxEdits") = std::nullopt,
+                 py::arg("vGeneFilter") = std::nullopt,
+                 py::arg("jGeneFilter") = std::nullopt)
+
+            .def("SearchIndices",
+                 [](Trie &self,
+                    const std::string &query,
+                    int maxSubstitution,
+                    int maxInsertion,
+                    int maxDeletion,
+                    std::optional<int> maxEdits,
+                    const std::optional<std::string> &vGeneFilter,
+                    const std::optional<std::string> &jGeneFilter) {
+                    return call_without_gil(&Trie::SearchIndices,
                                              &self,
                                              query,
                                              maxSubstitution,
@@ -83,7 +110,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     float maxCost,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
-                     return call_without_gil(&Trie::SearchWithMatrix,
+                    return call_without_gil(&Trie::SearchWithMatrix,
                                              &self,
                                              query,
                                              maxCost,
@@ -110,7 +137,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     std::optional<int> maxEdits,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
-                     return call_without_gil(&Trie::SearchForAll,
+                    return call_without_gil(&Trie::SearchForAll,
                                              &self,
                                              queries,
                                              maxSubstitution,
@@ -134,7 +161,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     float maxCost,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
-                     return call_without_gil(&Trie::SearchForAllWithMatrix,
+                    return call_without_gil(&Trie::SearchForAllWithMatrix,
                                              &self,
                                              queries,
                                              maxCost,
@@ -155,7 +182,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     std::optional<int> maxEdits,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
-                     return call_without_gil(&Trie::ClusterUsage,
+                    return call_without_gil(&Trie::ClusterUsage,
                                              &self,
                                              cluster,
                                              maxSubstitution,
@@ -179,7 +206,7 @@ PYBIND11_MODULE(_tcrtrie, m) {
                     float maxCost,
                     const std::optional<std::string> &vGeneFilter,
                     const std::optional<std::string> &jGeneFilter) {
-                     return call_without_gil(&Trie::ClusterUsageWithMatrix,
+                    return call_without_gil(&Trie::ClusterUsageWithMatrix,
                                              &self,
                                              cluster,
                                              maxCost,

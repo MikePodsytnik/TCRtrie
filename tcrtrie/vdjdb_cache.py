@@ -6,7 +6,7 @@ from typing import Optional
 from .vdjdb_loader import (
     fetch_latest_vdjdb_tag,
     fetch_latest_vdjdb_txt,
-    vdjdb_txt_to_airr_minimal,
+    vdjdb_txt_to_airr_and_sqlite,
 )
 
 import sys
@@ -38,6 +38,9 @@ def _make_progress_printer(prefix: str = "Downloading"):
 def cache_root() -> pathlib.Path:
     return pathlib.Path.home() / ".cache" / "tcrtrie" / "vdjdb"
 
+def get_cached_sqlite_path(root: pathlib.Path, tag: str) -> pathlib.Path:
+    return root / tag / "vdjdb.sqlite"
+
 
 def _latest_marker(root: pathlib.Path) -> pathlib.Path:
     return root / "LATEST"
@@ -60,23 +63,22 @@ def get_cached_airr_path(root: pathlib.Path, tag: str) -> pathlib.Path:
 
 
 def warmup_vdjdb_cache(*, root: pathlib.Path | None = None) -> pathlib.Path:
-    """
-    Ensures cache contains the latest VDJdb release (by GitHub latest tag).
-    Returns path to cached AIRR TSV.
-    """
     root = root or cache_root()
 
     tag = fetch_latest_vdjdb_tag()
     airr = get_cached_airr_path(root, tag)
-    if airr.exists():
+    sqlite = get_cached_sqlite_path(root, tag)
+
+    if airr.exists() and sqlite.exists():
         write_cached_latest_tag(root, tag)
         return airr
 
     progress = _make_progress_printer(prefix=f"Downloading VDJdb {tag}")
     vdjdb_txt, _ = fetch_latest_vdjdb_txt(cache_dir=root, version=tag, on_progress=progress)
     sys.stderr.write("\n")
+
     airr.parent.mkdir(parents=True, exist_ok=True)
-    vdjdb_txt_to_airr_minimal(vdjdb_txt=vdjdb_txt, out_airr_tsv=airr)
+    vdjdb_txt_to_airr_and_sqlite(vdjdb_txt=vdjdb_txt, out_airr_tsv=airr, out_sqlite=sqlite)
 
     write_cached_latest_tag(root, tag)
     return airr
