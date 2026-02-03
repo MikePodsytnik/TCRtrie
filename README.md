@@ -18,7 +18,7 @@ One can simply install the software out-of-the-box using [pip](https://pypi.org/
 ```bash
 conda create -n tcrtrie
 conda activate tcrtrie
-pip install git+https://github.com/MikePodsytnik/TCRtrie@0.1.0-tcrtriepy
+python -m pip install git+https://github.com/MikePodsytnik/TCRtrie@0.1.1-tcrtriepy
 tcrtrie-vdjdb-update
 ```
 
@@ -30,12 +30,38 @@ git clone --branch TCRtriePy https://github.com/MikePodsytnik/TCRtrie.git
 cd TCRtrie
 conda create -n tcrtrie
 conda activate tcrtrie
-pip install --upgrade pip setuptools wheel scikit-build-core pybind11
-pip install .
+python -m pip install --upgrade pip setuptools wheel scikit-build-core pybind11
+python -m pip install .
 tcrtrie-vdjdb-update
 ```
 
 > For this method, ensure your system has a C++ Compiler supporting C++17 and CMake ≥ 3.16 installed
+
+## VDJdb database management
+
+TCRtriePy does not update VDJdb automatically in order to avoid silent changes in scientific results.
+Database updates are performed explicitly via a command-line tool.
+
+The `tcrtrie-vdjdb-update` command downloads and installs a selected VDJdb release into the local cache
+(`~/.cache/tcrtrie/vdjdb`). The cached version is then used by the `VDJdb` object in Python.
+
+Install the latest available VDJdb release:
+```{bash}
+tcrtrie-vdjdb-update
+```
+
+Install a specific VDJdb version (recommended for reproducibility):
+```{bash}
+tcrtrie-vdjdb-update --tag 2025-12-29
+```
+
+List available VDJdb releases:
+```{bash}
+tcrtrie-vdjdb-update --list | head -n 10
+```
+
+After updating the database, restart the Python process or Jupyter kernel
+to ensure the new version is used.
 
 
 ## Python API Usage
@@ -53,29 +79,48 @@ airr_results = trie.SearchAIRR(
     maxInsertion=1,
     maxDeletion=1,
     vGeneFilter="TRBV4-1*01",
-    jGeneFilter="TRBJ1-2*01"
+    jGeneFilter="TRBJ1-2*01",
 )
 
 for r in airr_results:
    print(r.junctionAA, r.vGene, r.jGene, r.distance)
 ```
-Example using Substitution Matrix and [VDJdb](https://vdjdb.cdr3.net/)
+Example using Substitution Matrix
 ```python
-from tcrtrie import VDJdb
+from tcrtrie import Trie
+
+trie = Trie("vdjdb_airr.tsv")
 
 # If there is no corresponding column in the matrix.txt
-VDJdb.SetDeletionScore(-5)
-VDJdb.LoadSubstitutionMatrix("../blosum.txt")
+trie.SetDeletionScore(-5)
+trie.LoadSubstitutionMatrix("../blosum.txt")
 
-matrix_results = VDJdb.SearchWithMatrix(
+matrix_results = trie.SearchWithMatrix(
     query="CASSLATDGYTF",
     maxCost=5.0,
     vGeneFilter="TRBV5-6*01",
-    jGeneFilter="TRBJ1-2*01"
+    jGeneFilter="TRBJ1-2*01",
 )
 
 for r in matrix_results:
   print(r.junctionAA, r.vGene, r.jGene, "%.3f" %(r.distance))
+```
+
+Example using [VDJdb-object](https://vdjdb.cdr3.net/)
+```python
+from tcrtrie import VDJdb
+
+vdjdb_results_df = VDJdb.search( #return pandas.DataFrame
+    query="CASSLATDGYTF",
+    maxSubstitution=2,
+    maxInsertion=1,
+    maxDeletion=1,
+    vGeneFilter="TRBV5-6*01",
+    jGeneFilter="TRBJ1-2*01",
+)
+
+print(vdjdb_results_df.head(10))
+print(vdjdb_results_df['antigen.epitope'].value_counts().head(5))
 ```
 
 ## Key Features

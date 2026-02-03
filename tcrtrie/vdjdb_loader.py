@@ -6,8 +6,8 @@ import os
 import pathlib
 import tarfile
 import urllib.request
-import sqlite3
 import zipfile
+import sqlite3
 from dataclasses import dataclass
 
 
@@ -26,18 +26,18 @@ class VDJdbFormatError(RuntimeError):
     pass
 
 
-def _http_get_json(url: str, headers: dict[str, str]) -> dict:
+def _http_get_json(url: str, headers: dict[str, str]) -> object:
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _download(
-        url: str,
-        out_path: pathlib.Path,
-        headers: dict[str, str],
-        *,
-        on_progress=None,  # callable(downloaded_bytes: int, total_bytes: int | None)
+    url: str,
+    out_path: pathlib.Path,
+    headers: dict[str, str],
+    *,
+    on_progress=None,  # callable(downloaded_bytes: int, total_bytes: int | None)
 ) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = out_path.with_suffix(out_path.suffix + ".part")
@@ -99,7 +99,8 @@ def _find_vdjdb_txt(root: pathlib.Path) -> pathlib.Path:
     matches.sort(key=lambda p: len(p.parts))
     return matches[0]
 
-def fetch_latest_vdjdb_tag(*, github_token: str | None = None) -> str:
+
+def _github_headers(github_token: str | None = None) -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "tcrtriepy-vdjdb-loader",
@@ -107,36 +108,43 @@ def fetch_latest_vdjdb_tag(*, github_token: str | None = None) -> str:
     token = github_token or os.getenv("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    return headers
 
+
+def fetch_vdjdb_releases(*, github_token: str | None = None, per_page: int = 100) -> list[dict]:
+    headers = _github_headers(github_token)
+    api = f"https://api.github.com/repos/antigenomics/vdjdb-db/releases?per_page={per_page}"
+    rels = _http_get_json(api, headers=headers)
+    if not isinstance(rels, list):
+        raise VDJdbDownloadError("Unexpected response from GitHub releases endpoint.")
+    return rels
+
+
+def fetch_latest_vdjdb_tag(*, github_token: str | None = None) -> str:
+    headers = _github_headers(github_token)
     api = "https://api.github.com/repos/antigenomics/vdjdb-db/releases/latest"
     rel = _http_get_json(api, headers=headers)
-
+    if not isinstance(rel, dict):
+        raise VDJdbDownloadError("Unexpected response from GitHub latest release endpoint.")
     tag = rel.get("tag_name")
     if not tag:
-        raise VDJdbDownloadError("Cannot read tag_name from GitHub release response.")
+        raise VDJdbDownloadError("Cannot read tag_name from GitHub latest release response.")
     return tag
 
 
 def fetch_latest_vdjdb_txt(
-        *,
-        cache_dir: pathlib.Path,
-        version: str | None = None,
-        github_token: str | None = None,
-        on_progress=None) -> tuple[pathlib.Path, VDJdbRelease]:
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "tcrtriepy-vdjdb-loader",
-    }
-    token = github_token or os.getenv("GITHUB_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    *,
+    cache_dir: pathlib.Path,
+    version: str,
+    github_token: str | None = None,
+    on_progress=None,
+) -> tuple[pathlib.Path, VDJdbRelease]:
+    headers = _github_headers(github_token)
 
-    if version is None:
-        api = "https://api.github.com/repos/antigenomics/vdjdb-db/releases/latest"
-    else:
-        api = f"https://api.github.com/repos/antigenomics/vdjdb-db/releases/tags/{version}"
-
+    api = f"https://api.github.com/repos/antigenomics/vdjdb-db/releases/tags/{version}"
     rel = _http_get_json(api, headers=headers)
+    if not isinstance(rel, dict):
+        raise VDJdbDownloadError("Unexpected response from GitHub tag endpoint.")
 
     tag = rel.get("tag_name")
     if not tag:
@@ -172,52 +180,37 @@ def fetch_latest_vdjdb_txt(
     return canonical_txt, meta
 
 
-def _extract_airr_triplet(row: dict[str, str]) -> tuple[str, str, str] | None:
-    cdr3 = (row.get("cdr3") or "").strip()
-    v = (row.get("v.segm") or "").strip()
-    j = (row.get("j.segm") or "").strip()
-    if not (cdr3 and v and j):
-        return None
-    return cdr3, v, j
-
-AIRR_FIELDS = ["junction_aa", "v_call", "j_call"]
-
-def _open_airr_writer(out_airr_tsv: pathlib.Path):
-    out_airr_tsv.parent.mkdir(parents=True, exist_ok=True)
-    fout = open(out_airr_tsv, "w", newline="", encoding="utf-8")
-    w = csv.DictWriter(fout, fieldnames=AIRR_FIELDS, delimiter="\t")
-    w.writeheader()
-    return fout, w
-
-def _write_airr_row(w: csv.DictWriter, cdr3: str, v: str, j: str) -> None:
-    w.writerow({"junction_aa": cdr3, "v_call": v, "j_call": j})
-
 def _init_vdjdb_sqlite(sqlite_path: pathlib.Path, cols: list[str]) -> sqlite3.Connection:
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(sqlite_path)
     con.execute("PRAGMA journal_mode=WAL;")
     con.execute("DROP TABLE IF EXISTS vdjdb;")
-
     col_defs = ", ".join([f'"{c}" TEXT' for c in cols])
     con.execute(f'CREATE TABLE vdjdb (idx INTEGER PRIMARY KEY, {col_defs});')
     return con
 
-def _prepare_insert_sql(cols: list[str]) -> tuple[str, list[str]]:
-    col_list = ", ".join([f'"{c}"' for c in cols])
-    placeholders = ",".join(["?"] * (len(cols) + 1))
-    sql = f'INSERT INTO vdjdb (idx, {col_list}) VALUES ({placeholders});'
-    return sql, cols
 
-def _insert_full_row(con: sqlite3.Connection, insert_sql: str, idx: int, cols: list[str], row: dict[str, str]) -> None:
-    values = [row.get(c, "") for c in cols]
-    con.execute(insert_sql, [idx] + values)
+def _extract_airr_triplet(row: dict[str, str]) -> tuple[str, str, str] | None:
+    cdr3 = (row.get("cdr3") or "").strip()
+    v = (row.get("v.segm") or "").strip()
+    j = (row.get("j.segm") or "").strip()
+
+    v = v.replace('\t', '').replace('\n', '').replace('\r', '')
+    j = j.replace('\t', '').replace('\n', '').replace('\r', '')
+
+    if not (cdr3 and v and j):
+        return None
+    return cdr3, v, j
+
 
 def vdjdb_txt_to_airr_and_sqlite(
-        *,
-        vdjdb_txt: pathlib.Path,
-        out_airr_tsv: pathlib.Path,
-        out_sqlite: pathlib.Path,
+    *,
+    vdjdb_txt: pathlib.Path,
+    out_airr_tsv: pathlib.Path,
+    out_sqlite: pathlib.Path,
 ) -> None:
+    out_airr_tsv.parent.mkdir(parents=True, exist_ok=True)
+
     with open(vdjdb_txt, "r", newline="", encoding="utf-8") as fin:
         reader = csv.DictReader(fin, delimiter="\t")
         if reader.fieldnames is None:
@@ -232,21 +225,26 @@ def vdjdb_txt_to_airr_and_sqlite(
 
         con = _init_vdjdb_sqlite(out_sqlite, cols)
         try:
-            insert_sql, cols = _prepare_insert_sql(cols)
-            fout, w = _open_airr_writer(out_airr_tsv)
-            try:
+            airr_fields = ["junction_aa", "v_call", "j_call"]
+            with open(out_airr_tsv, "w", newline="", encoding="utf-8") as fout:
+                w = csv.DictWriter(fout, fieldnames=airr_fields, delimiter="\t")
+                w.writeheader()
+
                 idx = 0
+                col_list = ", ".join([f'"{c}"' for c in cols])
+                placeholders = ",".join(["?"] * (len(cols) + 1))
+                insert_sql = f'INSERT INTO vdjdb (idx, {col_list}) VALUES ({placeholders});'
+
                 for row in reader:
                     triplet = _extract_airr_triplet(row)
                     if triplet is None:
                         continue
                     cdr3, v, j = triplet
 
-                    _write_airr_row(w, cdr3, v, j)
-                    _insert_full_row(con, insert_sql, idx, cols, row)
+                    w.writerow({"junction_aa": cdr3, "v_call": v, "j_call": j})
+                    values = [row.get(c, "") for c in cols]
+                    con.execute(insert_sql, [idx] + values)
                     idx += 1
-            finally:
-                fout.close()
 
             con.commit()
         finally:

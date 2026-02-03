@@ -5,6 +5,27 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <cctype>
+
+namespace {
+    inline bool IsWhitespace(char c) {
+        return std::isspace(static_cast<unsigned char>(c));
+    }
+
+    size_t FindNextWhitespace(const std::string& str, size_t pos) {
+        while (pos < str.size() && !IsWhitespace(str[pos])) {
+            ++pos;
+        }
+        return pos;
+    }
+
+    size_t SkipWhitespace(const std::string& str, size_t pos) {
+        while (pos < str.size() && IsWhitespace(str[pos])) {
+            ++pos;
+        }
+        return pos;
+    }
+}
 
 std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
     std::vector<AIRREntity> entries;
@@ -20,16 +41,27 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
         std::cerr << "[Error] Empty file.\n";
         return entries;
     }
+
     std::unordered_map<std::string, int> colIdx;
     {
-        int idx = 0, pos = 0;
-        while (pos <= (int)header.size()) {
-            int tab = header.find('\t', pos);
-            if (tab == std::string::npos) tab = header.size();
-            colIdx[ header.substr(pos, tab - pos) ] = idx++;
-            pos = tab + 1;
+        int idx = 0;
+        size_t pos = 0;
+
+        while (pos < header.size()) {
+            pos = SkipWhitespace(header, pos);
+            if (pos >= header.size()) break;
+
+            size_t end = FindNextWhitespace(header, pos);
+
+            std::string colName = header.substr(pos, end - pos);
+            if (!colName.empty()) {
+                colIdx[colName] = idx++;
+            }
+
+            pos = end;
         }
     }
+
     auto itJ = colIdx.find("junction_aa");
     if (itJ == colIdx.end()) {
         std::cerr << "[Error] No column junction_aa.\n";
@@ -46,14 +78,16 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
         int col = 0;
         size_t start = 0;
 
-        while (col <= maxCol && start <= line.size()) {
-            size_t end = line.find('\t', start);
-            if (end == std::string::npos) end = line.size();
+        while (col <= maxCol && start < line.size()) {
+            start = SkipWhitespace(line, start);
+            if (start >= line.size()) break;
+
+            size_t end = FindNextWhitespace(line, start);
 
             std::string_view fv{ line.data() + start, end - start };
+
             if (col == junctionCol) {
                 ent.junctionAA.assign(fv);
-                if (ent.junctionAA.empty()) break;
             }
             else if (col == vCol) {
                 ent.vGene.assign(fv);
@@ -62,7 +96,7 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
                 ent.jGene.assign(fv);
             }
 
-            start = end + 1;
+            start = end;
             ++col;
         }
 

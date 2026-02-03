@@ -4,13 +4,13 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "tcrtrie"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python bindings for TCR trie search"
 requires-python = ">=3.8"
 dependencies = ["pandas>=1.5"]
 
 [project.scripts]
-tcrtrie-vdjdb-update = "tcrtrie.vdjdb_cache:warmup_vdjdb_cache"
+tcrtrie-vdjdb-update = "tcrtrie.cli_vdjdb_update:main"
 
 [tool.scikit-build]
 wheel.packages = ["tcrtrie"]
