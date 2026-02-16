@@ -8,6 +8,7 @@ import tarfile
 import urllib.request
 import zipfile
 import sqlite3
+import shutil
 from dataclasses import dataclass
 
 
@@ -160,8 +161,8 @@ def fetch_latest_vdjdb_txt(
 
     rel_dir = cache_dir / tag
     archive_path = rel_dir / asset_name
-    extract_dir = rel_dir / "extracted"
-    canonical_txt = extract_dir / "vdjdb.txt"
+
+    canonical_txt = rel_dir / "vdjdb.txt"
 
     if canonical_txt.exists():
         return canonical_txt, meta
@@ -171,11 +172,13 @@ def fetch_latest_vdjdb_txt(
     if not archive_path.exists():
         _download(asset_url, archive_path, headers=headers, on_progress=on_progress)
 
-    _extract_archive(archive_path, extract_dir)
-    real_txt = _find_vdjdb_txt(extract_dir)
-
-    if real_txt.resolve() != canonical_txt.resolve():
+    extract_dir = rel_dir / "extracted"
+    try:
+        _extract_archive(archive_path, extract_dir)
+        real_txt = _find_vdjdb_txt(extract_dir)
         canonical_txt.write_bytes(real_txt.read_bytes())
+    finally:
+        shutil.rmtree(extract_dir, ignore_errors=True)
 
     return canonical_txt, meta
 
