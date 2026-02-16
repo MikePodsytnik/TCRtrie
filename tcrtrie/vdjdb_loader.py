@@ -112,6 +112,52 @@ def _github_headers(github_token: str | None = None) -> dict[str, str]:
     return headers
 
 
+def _http_get_text(url: str, headers: dict[str, str]) -> str:
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req) as resp:
+        return resp.read().decode("utf-8")
+
+
+def fetch_vdjdb_txt_from_asset_url(
+    *,
+    cache_dir: pathlib.Path,
+    asset_url: str,
+    on_progress=None,
+    github_token: str | None = None,
+) -> pathlib.Path:
+    headers = _github_headers(github_token)
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    asset_name = asset_url.rstrip("/").split("/")[-1]
+    if not asset_name:
+        raise VDJdbDownloadError("Cannot infer asset file name from URL.")
+
+    archive_path = cache_dir / asset_name
+    canonical_txt = cache_dir / "vdjdb.txt"
+
+    if canonical_txt.exists():
+        return canonical_txt
+
+    if not archive_path.exists():
+        _download(asset_url, archive_path, headers=headers, on_progress=on_progress)
+
+    extract_dir = cache_dir / f"extracted-{os.getpid()}"
+
+    try:
+        _extract_archive(archive_path, extract_dir)
+        real_txt = _find_vdjdb_txt(extract_dir)
+
+        tmp = canonical_txt.with_suffix(".txt.part")
+        tmp.write_bytes(real_txt.read_bytes())
+        tmp.replace(canonical_txt)
+
+    finally:
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+    return canonical_txt
+
+
 def fetch_vdjdb_releases(*, github_token: str | None = None, per_page: int = 100) -> list[dict]:
     headers = _github_headers(github_token)
     api = f"https://api.github.com/repos/antigenomics/vdjdb-db/releases?per_page={per_page}"
@@ -160,23 +206,27 @@ def fetch_latest_vdjdb_txt(
     meta = VDJdbRelease(tag=tag, asset_name=asset_name, asset_url=asset_url)
 
     rel_dir = cache_dir / tag
-    archive_path = rel_dir / asset_name
+    rel_dir.mkdir(parents=True, exist_ok=True)
 
+    archive_path = rel_dir / asset_name
     canonical_txt = rel_dir / "vdjdb.txt"
 
     if canonical_txt.exists():
         return canonical_txt, meta
 
-    rel_dir.mkdir(parents=True, exist_ok=True)
-
     if not archive_path.exists():
         _download(asset_url, archive_path, headers=headers, on_progress=on_progress)
 
-    extract_dir = rel_dir / "extracted"
+    extract_dir = rel_dir / f"extracted-{os.getpid()}"
+
     try:
         _extract_archive(archive_path, extract_dir)
         real_txt = _find_vdjdb_txt(extract_dir)
-        canonical_txt.write_bytes(real_txt.read_bytes())
+
+        tmp = canonical_txt.with_suffix(".txt.part")
+        tmp.write_bytes(real_txt.read_bytes())
+        tmp.replace(canonical_txt)
+
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
 

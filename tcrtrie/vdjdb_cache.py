@@ -9,6 +9,8 @@ from .vdjdb_loader import (
     fetch_vdjdb_releases,
     fetch_latest_vdjdb_tag,
     fetch_latest_vdjdb_txt,
+    fetch_vdjdb_txt_from_asset_url,
+    _http_get_text,
     vdjdb_txt_to_airr_and_sqlite,
 )
 
@@ -94,7 +96,67 @@ def install_vdjdb_tag(*, tag: str, root: pathlib.Path | None = None) -> pathlib.
     write_cached_active_tag(root, tag)
     return airr
 
+
 def install_vdjdb_latest(*, root: pathlib.Path | None = None) -> pathlib.Path:
     root = root or cache_root()
     tag = fetch_latest_vdjdb_tag()
     return install_vdjdb_tag(tag=tag, root=root)
+
+
+def _web_dir(root: pathlib.Path) -> pathlib.Path:
+    return root / "web"
+
+
+def _clear_dir(path: pathlib.Path) -> None:
+    if not path.exists():
+        return
+    for p in sorted(path.rglob("*"), reverse=True):
+        try:
+            if p.is_file() or p.is_symlink():
+                p.unlink()
+            elif p.is_dir():
+                p.rmdir()
+        except Exception:
+            pass
+    try:
+        path.rmdir()
+    except Exception:
+        pass
+
+
+def _read_web_latest_url() -> str:
+    url = "https://raw.githubusercontent.com/antigenomics/vdjdb-db/master/latest-version.txt"
+    headers = {"User-Agent": "tcrtriepy-vdjdb-loader"}
+    text = _http_get_text(url, headers=headers)
+
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            continue
+        return s
+
+    raise RuntimeError("latest-version.txt is empty or contains no valid URLs.")
+
+
+def install_vdjdb_web_latest(*, root: pathlib.Path | None = None) -> pathlib.Path:
+    root = root or cache_root()
+
+    web_dir = _web_dir(root)
+    _clear_dir(web_dir)
+    web_dir.mkdir(parents=True, exist_ok=True)
+
+    asset_url = _read_web_latest_url()
+
+    progress = _make_progress_printer(prefix="Downloading VDJdb (web)")
+    vdjdb_txt = fetch_vdjdb_txt_from_asset_url(cache_dir=web_dir, asset_url=asset_url, on_progress=progress)
+    sys.stderr.write("\n")
+
+    airr = web_dir / "vdjdb_airr.tsv"
+    sqlite = web_dir / "vdjdb.sqlite"
+    vdjdb_txt_to_airr_and_sqlite(vdjdb_txt=vdjdb_txt, out_airr_tsv=airr, out_sqlite=sqlite)
+
+    write_cached_active_tag(root, "web")
+    return airr
+
