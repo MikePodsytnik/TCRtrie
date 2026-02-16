@@ -13,6 +13,15 @@ class VDJdbClient:
     def __init__(self, *, trie: Trie, sqlite_path: Path):
         self._trie = trie
         self._sqlite_path = sqlite_path
+        self._df = self._load_table()
+
+    def _load_table(self) -> pd.DataFrame:
+        con = sqlite3.connect(self._sqlite_path)
+        try:
+            df = pd.read_sql_query("SELECT * FROM vdjdb", con)
+        finally:
+            con.close()
+        return df
 
     @property
     def trie(self) -> Trie:
@@ -45,12 +54,7 @@ class VDJdbClient:
         idxs = [int(i) for i, _ in raw]
         dists = [int(d) for _, d in raw]
 
-        con = sqlite3.connect(self._sqlite_path)
-        try:
-            q = f"SELECT * FROM vdjdb WHERE idx IN ({','.join(['?'] * len(idxs))})"
-            df = pd.read_sql_query(q, con, params=idxs)
-        finally:
-            con.close()
+        df = self._df[self._df["idx"].isin(set(idxs))].copy()
 
         df["_distance"] = df["idx"].map(dict(zip(idxs, dists)))
         order = {idx: pos for pos, idx in enumerate(idxs)}
