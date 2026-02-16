@@ -58,6 +58,7 @@ class VDJdbClient:
         df = df.sort_values("_order").drop(columns=["_order"])
         df = df.rename(columns={"_distance": "distance"})
         df = df.drop('idx', axis=1)
+        df = df.drop('complex.id', axis=1)
         col = df.pop('distance')
         df.insert(0, 'distance', col)
 
