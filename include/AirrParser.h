@@ -10,6 +10,7 @@ struct AIRREntity {
     std::string vGene;
     std::string jGene;
     double distance{};
+    int groupId{-1};
 
     AIRREntity() = default;
     AIRREntity(std::string_view ja,

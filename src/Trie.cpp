@@ -506,6 +506,82 @@ std::unordered_map<std::string, std::vector<std::pair<size_t, float>>> Trie::Sea
     return result;
 }
 
+std::unordered_map<std::string, std::vector<int>> Trie::SearchGroupIdsForAll(
+        const std::vector<std::string>& queries,
+        int maxSubstitution, int maxInsertion,
+        int maxDeletion, std::optional<int> maxEdits,
+        std::optional<std::vector<std::string>> vGeneFilters,
+        std::optional<std::vector<std::string>> jGeneFilters,
+        bool unique) {
+
+    if (vGeneFilters && vGeneFilters->size() != queries.size()) {
+        throw std::invalid_argument("vGeneFilters must have the same length as queries");
+    }
+    if (jGeneFilters && jGeneFilters->size() != queries.size()) {
+        throw std::invalid_argument("jGeneFilters must have the same length as queries");
+    }
+
+    std::unordered_map<std::string, std::vector<int>> result;
+    std::vector<std::future<std::pair<std::string, std::vector<int>>>> futures;
+
+    std::size_t hc = std::thread::hardware_concurrency();
+    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
+
+    for (std::size_t i = 0; i < queries.size(); ++i) {
+        const std::string query = queries[i];
+
+        const std::optional<std::string> vFilter =
+                vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
+        const std::optional<std::string> jFilter =
+                jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
+
+        futures.emplace_back(std::async(std::launch::async,
+            [this, query,
+             maxSubstitution, maxInsertion, maxDeletion,
+             maxEdits, vFilter, jFilter, unique]() -> std::pair<std::string, std::vector<int>> {
+
+                auto hits = this->SearchIndices(query,
+                                                maxSubstitution,
+                                                maxInsertion,
+                                                maxDeletion,
+                                                maxEdits,
+                                                vFilter,
+                                                jFilter);
+
+                if (!unique) {
+                    std::vector<int> gids;
+                    gids.reserve(hits.size());
+                    for (const auto& [idx, dist] : hits) {
+                        gids.push_back(groupIds_[idx]);
+                    }
+                    return { query, std::move(gids) };
+                }
+
+                std::unordered_set<int> s;
+                s.reserve(hits.size());
+                for (const auto& [idx, dist] : hits) {
+                    s.insert(groupIds_[idx]);
+                }
+
+                std::vector<int> gids;
+                gids.reserve(s.size());
+                for (int gid : s) gids.push_back(gid);
+
+                return { query, std::move(gids) };
+            }));
+
+        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
+            for (auto& fut : futures) {
+                auto completed = fut.get();
+                result[std::move(completed.first)] = std::move(completed.second);
+            }
+            futures.clear();
+        }
+    }
+
+    return result;
+}
+
 std::unordered_set<AIRREntity> Trie::ClusterUsage(
         const std::vector<std::string>& cluster,
         int maxSubstitution, int maxInsertion, int maxDeletion,
@@ -1112,6 +1188,7 @@ void Trie::LoadAIRR(const std::string& dataPath) {
         sequences_.push_back(e.junctionAA);
         vGenes_.push_back(e.vGene);
         jGenes_.push_back(e.jGene);
+        groupIds_.push_back(e.groupId);
     }
 }
 

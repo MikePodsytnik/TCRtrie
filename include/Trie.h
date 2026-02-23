@@ -132,6 +132,16 @@ public:
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
         std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
 
+    std::unordered_map<std::string, std::vector<int>> SearchGroupIdsForAll(
+        const std::vector<std::string>& queries,
+        int maxSubstitution = 0,
+        int maxInsertion = 0,
+        int maxDeletion = 0,
+        std::optional<int> maxEdits = std::nullopt,
+        std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        bool unique = true);
+
     std::unordered_set<AIRREntity> ClusterUsage(
         const std::vector<std::string>& cluster,
         int maxSubstitution = 0,
@@ -161,6 +171,7 @@ private:
     std::vector<std::string> sequences_;
     std::vector<std::string> vGenes_;
     std::vector<std::string> jGenes_;
+    std::vector<int> groupIds_;
 
     void LoadAIRR(const std::string& dataPath);
     void BuildTrie();

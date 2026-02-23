@@ -228,6 +228,36 @@ PYBIND11_MODULE(_tcrtrie, m) {
              py::arg("vGeneFilters") = std::nullopt,
              py::arg("jGeneFilters") = std::nullopt)
 
+        .def("SearchGroupIdsForAll",
+             [](Trie& self,
+                const std::vector<std::string>& queries,
+                int maxSubstitution,
+                int maxInsertion,
+                int maxDeletion,
+                std::optional<int> maxEdits,
+                std::optional<std::vector<std::string>> vGeneFilters,
+                std::optional<std::vector<std::string>> jGeneFilters,
+                bool unique) {
+                 return call_without_gil(&Trie::SearchGroupIdsForAll,
+                                         &self,
+                                         queries,
+                                         maxSubstitution,
+                                         maxInsertion,
+                                         maxDeletion,
+                                         maxEdits,
+                                         vGeneFilters,
+                                         jGeneFilters,
+                                         unique);
+             },
+             py::arg("queries"),
+             py::arg("maxSubstitution") = 0,
+             py::arg("maxInsertion") = 0,
+             py::arg("maxDeletion") = 0,
+             py::arg("maxEdits") = std::nullopt,
+             py::arg("vGeneFilters") = std::nullopt,
+             py::arg("jGeneFilters") = std::nullopt,
+             py::arg("unique") = true)
+
         .def("ClusterUsage",
              [](Trie& self,
                 const std::vector<std::string>& cluster,

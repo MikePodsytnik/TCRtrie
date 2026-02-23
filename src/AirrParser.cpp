@@ -2,29 +2,51 @@
 
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
-#include <cctype>
+#include <vector>
+#include <charconv>
 
 namespace {
-    inline bool IsWhitespace(char c) {
-        return std::isspace(static_cast<unsigned char>(c));
-    }
 
-    size_t FindNextWhitespace(const std::string& str, size_t pos) {
-        while (pos < str.size() && !IsWhitespace(str[pos])) {
-            ++pos;
-        }
-        return pos;
-    }
+inline void TrimCR(std::string& s) {
+    if (!s.empty() && s.back() == '\r') s.pop_back();
+}
 
-    size_t SkipWhitespace(const std::string& str, size_t pos) {
-        while (pos < str.size() && IsWhitespace(str[pos])) {
-            ++pos;
-        }
-        return pos;
+inline std::vector<std::string_view> SplitTSVViews(const std::string& line) {
+    std::vector<std::string_view> fields;
+    fields.reserve(32);
+
+    size_t start = 0;
+    while (start <= line.size()) {
+        size_t end = line.find('\t', start);
+        if (end == std::string::npos) end = line.size();
+        fields.emplace_back(line.data() + start, end - start);
+        start = end + 1;
+        if (end == line.size()) break;
     }
+    return fields;
+}
+
+inline int ParseIntOrDefault(std::string_view sv, int def) {
+    if (sv.empty()) return def;
+
+    int value = def;
+    auto first = sv.data();
+    auto last = sv.data() + sv.size();
+
+    while (first < last && (*first == ' ' || *first == '\t')) ++first;
+    while (last > first && (*(last - 1) == ' ' || *(last - 1) == '\t')) --last;
+
+    if (first >= last) return def;
+
+    std::from_chars_result r = std::from_chars(first, last, value);
+    if (r.ec != std::errc()) return def;
+    return value;
+}
+
 }
 
 std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
@@ -41,24 +63,16 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
         std::cerr << "[Error] Empty file.\n";
         return entries;
     }
+    TrimCR(header);
 
     std::unordered_map<std::string, int> colIdx;
     {
-        int idx = 0;
-        size_t pos = 0;
+        auto fields = SplitTSVViews(header);
+        colIdx.reserve(fields.size());
 
-        while (pos < header.size()) {
-            pos = SkipWhitespace(header, pos);
-            if (pos >= header.size()) break;
-
-            size_t end = FindNextWhitespace(header, pos);
-
-            std::string colName = header.substr(pos, end - pos);
-            if (!colName.empty()) {
-                colIdx[colName] = idx++;
-            }
-
-            pos = end;
+        for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+            std::string name(fields[i]);
+            if (!name.empty()) colIdx.emplace(std::move(name), i);
         }
     }
 
@@ -67,42 +81,50 @@ std::vector<AIRREntity> ParseAIRR(const std::string& filepath) {
         std::cerr << "[Error] No column junction_aa.\n";
         return entries;
     }
-    int junctionCol = itJ->second;
-    int vCol = colIdx.count("v_call") ? colIdx["v_call"] : -1;
-    int jCol = colIdx.count("j_call") ? colIdx["j_call"] : -1;
-    int maxCol = std::max(junctionCol, std::max(vCol, jCol));
+
+    const int junctionCol = itJ->second;
+    const int vCol = colIdx.count("v_call") ? colIdx["v_call"] : -1;
+    const int jCol = colIdx.count("j_call") ? colIdx["j_call"] : -1;
+    const int gidCol = colIdx.count("__group_id") ? colIdx["__group_id"] : -1;
+
+    int maxCol = junctionCol;
+    if (vCol > maxCol) maxCol = vCol;
+    if (jCol > maxCol) maxCol = jCol;
+    if (gidCol > maxCol) maxCol = gidCol;
 
     std::string line;
     while (std::getline(file, line)) {
+        TrimCR(line);
+        if (line.empty()) continue;
+
+        auto fields = SplitTSVViews(line);
+        if (junctionCol >= static_cast<int>(fields.size())) continue;
+
         AIRREntity ent;
-        int col = 0;
-        size_t start = 0;
 
-        while (col <= maxCol && start < line.size()) {
-            start = SkipWhitespace(line, start);
-            if (start >= line.size()) break;
-
-            size_t end = FindNextWhitespace(line, start);
-
-            std::string_view fv{ line.data() + start, end - start };
-
-            if (col == junctionCol) {
-                ent.junctionAA.assign(fv);
-            }
-            else if (col == vCol) {
-                ent.vGene.assign(fv);
-            }
-            else if (col == jCol) {
-                ent.jGene.assign(fv);
-            }
-
-            start = end;
-            ++col;
+        {
+            auto sv = fields[junctionCol];
+            if (sv.empty()) continue;
+            ent.junctionAA.assign(sv);
         }
 
-        if (!ent.junctionAA.empty()) {
-            entries.push_back(std::move(ent));
+        if (vCol >= 0 && vCol < static_cast<int>(fields.size())) {
+            auto sv = fields[vCol];
+            if (!sv.empty()) ent.vGene.assign(sv);
         }
+
+        if (jCol >= 0 && jCol < static_cast<int>(fields.size())) {
+            auto sv = fields[jCol];
+            if (!sv.empty()) ent.jGene.assign(sv);
+        }
+
+        if (gidCol >= 0 && gidCol < static_cast<int>(fields.size())) {
+            ent.groupId = ParseIntOrDefault(fields[gidCol], -1);
+        } else {
+            ent.groupId = -1;
+        }
+
+        entries.push_back(std::move(ent));
     }
 
     return entries;
