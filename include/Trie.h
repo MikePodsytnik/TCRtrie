@@ -132,7 +132,7 @@ public:
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
         std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
 
-    std::unordered_map<std::string, std::vector<int>> SearchGroupIdsForAll(
+    std::vector<std::vector<int>> SearchGroupIdsForAll(
         const std::vector<std::string>& queries,
         int maxSubstitution = 0,
         int maxInsertion = 0,

@@ -506,14 +506,13 @@ std::unordered_map<std::string, std::vector<std::pair<size_t, float>>> Trie::Sea
     return result;
 }
 
-std::unordered_map<std::string, std::vector<int>> Trie::SearchGroupIdsForAll(
-        const std::vector<std::string>& queries,
-        int maxSubstitution, int maxInsertion,
-        int maxDeletion, std::optional<int> maxEdits,
-        std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters,
-        bool unique) {
-
+std::vector<std::vector<int>> Trie::SearchGroupIdsForAll(
+    const std::vector<std::string>& queries,
+    int maxSubstitution, int maxInsertion,
+    int maxDeletion, std::optional<int> maxEdits,
+    std::optional<std::vector<std::string>> vGeneFilters,
+    std::optional<std::vector<std::string>> jGeneFilters,
+    bool unique) {
     if (vGeneFilters && vGeneFilters->size() != queries.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as queries");
     }
@@ -521,24 +520,28 @@ std::unordered_map<std::string, std::vector<int>> Trie::SearchGroupIdsForAll(
         throw std::invalid_argument("jGeneFilters must have the same length as queries");
     }
 
-    std::unordered_map<std::string, std::vector<int>> result;
-    std::vector<std::future<std::pair<std::string, std::vector<int>>>> futures;
+    const std::size_t n = queries.size();
+    std::vector<std::vector<int>> result(n);
+
+    std::vector<std::future<void>> futures;
 
     std::size_t hc = std::thread::hardware_concurrency();
     std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
 
-    for (std::size_t i = 0; i < queries.size(); ++i) {
+    for (std::size_t i = 0; i < n; ++i) {
+
         const std::string query = queries[i];
 
         const std::optional<std::string> vFilter =
-                vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
+            vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
+
         const std::optional<std::string> jFilter =
-                jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
+            jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
 
         futures.emplace_back(std::async(std::launch::async,
-            [this, query,
+            [this, &result, i, query,
              maxSubstitution, maxInsertion, maxDeletion,
-             maxEdits, vFilter, jFilter, unique]() -> std::pair<std::string, std::vector<int>> {
+             maxEdits, vFilter, jFilter, unique]() {
 
                 auto hits = this->SearchIndices(query,
                                                 maxSubstitution,
@@ -554,7 +557,8 @@ std::unordered_map<std::string, std::vector<int>> Trie::SearchGroupIdsForAll(
                     for (const auto& [idx, dist] : hits) {
                         gids.push_back(groupIds_[idx]);
                     }
-                    return { query, std::move(gids) };
+                    result[i] = std::move(gids);
+                    return;
                 }
 
                 std::unordered_set<int> s;
@@ -565,15 +569,16 @@ std::unordered_map<std::string, std::vector<int>> Trie::SearchGroupIdsForAll(
 
                 std::vector<int> gids;
                 gids.reserve(s.size());
-                for (int gid : s) gids.push_back(gid);
+                for (int gid : s) {
+                    gids.push_back(gid);
+                }
 
-                return { query, std::move(gids) };
+                result[i] = std::move(gids);
             }));
 
-        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
+        if (futures.size() >= maxConcurrent || i + 1 == n) {
             for (auto& fut : futures) {
-                auto completed = fut.get();
-                result[std::move(completed.first)] = std::move(completed.second);
+                fut.get();
             }
             futures.clear();
         }
