@@ -17,3 +17,6 @@ wheel.packages = ["tcrtrie"]
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+tcrtrie = ["data/matrices/*.txt"]
