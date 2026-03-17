@@ -62,7 +62,7 @@ public:
     ~Trie();
 
     void SetMaxQueryLength(int newMaxQueryLength);
-    void LoadSubstitutionMatrix(const std::string& matrixPath);
+    void LoadSubstitutionMatrix(const std::string& matrixPath, const std::string& delimiter = "");
     void SetDeletionScore(float deletionScore);
     void PrintMatrix();
 

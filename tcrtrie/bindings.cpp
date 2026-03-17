@@ -37,7 +37,9 @@ PYBIND11_MODULE(_tcrtrie, m) {
              py::arg("vGenes"),
              py::arg("jGenes"))
 
-        .def("LoadSubstitutionMatrix", &Trie::LoadSubstitutionMatrix, py::arg("matrixPath"))
+        .def("LoadSubstitutionMatrix", &Trie::LoadSubstitutionMatrix,
+             py::arg("matrixPath"),
+             py::arg("delimiter") = "")
         .def("SetMaxQueryLength", &Trie::SetMaxQueryLength, py::arg("newMaxQueryLength"))
         .def("SetDeletionScore", &Trie::SetDeletionScore, py::arg("deletionScore"))
         .def("PrintMatrix", &Trie::PrintMatrix)

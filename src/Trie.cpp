@@ -144,7 +144,7 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     initialRowDetailed[0].push_back({0, 0, 0});
     for (int j = 1; j <= queryLength; ++j) {
         if (j <= *maxEdits) {
-            initialRowDetailed[j].push_back({0, static_cast<int16_t>(j), 0});
+            initialRowDetailed[j].push_back({0, 0, static_cast<int16_t>(j)});
         }
     }
 
@@ -204,7 +204,7 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
     initialRowDetailed[0].push_back({0, 0, 0});
     for (int j = 1; j <= queryLength; ++j) {
         if (j <= *maxEdits) {
-            initialRowDetailed[j].push_back({0, static_cast<int16_t>(j), 0});
+            initialRowDetailed[j].push_back({0, 0, static_cast<int16_t>(j)});
         }
     }
 
@@ -1233,53 +1233,135 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
     return newNode;
 }
 
-void Trie::LoadSubstitutionMatrix(const std::string& matrixPath) {
+void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
+                                  const std::string& delimiter) {
     std::ifstream file(matrixPath);
-    if (!file) { std::cerr << "Cannot open matrix\n"; return; }
+    if (!file) {
+        std::cerr << "Cannot open matrix\n";
+        return;
+    }
+
+    auto split = [](const std::string& s, const std::string& delim) -> std::vector<std::string> {
+        std::vector<std::string> parts;
+
+        if (delim.empty()) {
+            std::istringstream iss(s);
+            std::string token;
+            while (iss >> token) {
+                parts.push_back(token);
+            }
+            return parts;
+        }
+
+        std::size_t start = 0;
+        while (true) {
+            std::size_t pos = s.find(delim, start);
+            if (pos == std::string::npos) {
+                parts.push_back(s.substr(start));
+                break;
+            }
+            parts.push_back(s.substr(start, pos - start));
+            start = pos + delim.size();
+        }
+
+        return parts;
+    };
 
     std::vector<char> letters;
-    std::string line;
-    std::getline(file, line);
-    std::istringstream hs(line);
-    char letter;
-    while (hs >> letter) letters.push_back(letter);
-
     std::unordered_map<char, std::unordered_map<char, float>> rawScores;
-    bool isCostMatrix = true, isDiagonalMatrix = true;
+    bool isCostMatrix = true;
+    bool isDiagonalMatrix = true;
+
+    std::string line;
+
+    while (std::getline(file, line)) {
+        if (!line.empty()) break;
+    }
+
+    if (line.empty()) {
+        std::cerr << "Empty matrix file\n";
+        return;
+    }
+
+    {
+        auto headerTokens = split(line, delimiter);
+        for (const auto& token : headerTokens) {
+            if (token.empty()) continue;
+            letters.push_back(token[0]);
+        }
+    }
 
     rawScores['-']['-'] = std::fabs(deletionScore_);
 
     for (char r : letters) {
         rawScores[r]['-'] = deletionScore_;
         rawScores['-'][r] = deletionScore_;
-        file >> letter;
-        for (char c : letters) {
-            float v; file >> v;
-            rawScores[r][c] = v;
-            rawScores[c][r] = v;
-            if (v < 0) isCostMatrix = false;
-            if (r == c && v != 0) isDiagonalMatrix = false;
+    }
+
+    int rowIndex = 0;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+
+        auto tokens = split(line, delimiter);
+        if (tokens.empty()) continue;
+
+        std::vector<std::string> filtered;
+        filtered.reserve(tokens.size());
+        for (const auto& t : tokens) {
+            if (!t.empty()) {
+                filtered.push_back(t);
+            }
         }
+        if (filtered.empty()) continue;
+
+        char rowLetter = filtered[0][0];
+
+        if (filtered.size() != letters.size() + 1) {
+            std::cerr << "Invalid matrix row format for row " << rowLetter
+                      << ": expected " << (letters.size() + 1)
+                      << " tokens, got " << filtered.size() << std::endl;
+            return;
+        }
+
+        for (std::size_t i = 0; i < letters.size(); ++i) {
+            char colLetter = letters[i];
+            float v = std::stof(filtered[i + 1]);
+
+            rawScores[rowLetter][colLetter] = v;
+            rawScores[colLetter][rowLetter] = v;
+
+            if (v < 0) isCostMatrix = false;
+            if (rowLetter == colLetter && v != 0) isDiagonalMatrix = false;
+        }
+
+        ++rowIndex;
     }
 
     deletionScore_ = rawScores['-']['-'];
-    letters.push_back('-');
+    std::vector<char> allLetters = letters;
+    allLetters.push_back('-');
+
     substitutionMatrix_.clear();
 
     if (isCostMatrix && isDiagonalMatrix) {
         substitutionMatrix_ = rawScores;
     } else {
-        for (char r : letters) {
-            for (char c : letters) {
-                substitutionMatrix_[r][c] = (rawScores[r][r] + rawScores[c][c]) * 0.5f - rawScores[r][c];
+        for (char r : allLetters) {
+            for (char c : allLetters) {
+                substitutionMatrix_[r][c] =
+                    (rawScores[r][r] + rawScores[c][c]) * 0.5f - rawScores[r][c];
             }
         }
     }
 
-    for (char r : letters)
-        for (char c : letters)
-            if (substitutionMatrix_[r][c] < 0)
-                std::cerr << "Negative cost: " << r << " vs " << c << " = " << substitutionMatrix_[r][c] << std::endl;
+    for (char r : allLetters) {
+        for (char c : allLetters) {
+            if (substitutionMatrix_[r][c] < 0) {
+                std::cerr << "Negative cost: " << r << " vs " << c
+                          << " = " << substitutionMatrix_[r][c] << std::endl;
+            }
+        }
+    }
 
     useSubstitutionMatrix_ = true;
 }

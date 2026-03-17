@@ -138,6 +138,9 @@ class VDJdbClient:
 
         return pd.concat(frames, ignore_index=True, copy=False)
 
+    def load_matrix(self, path: str | Path, delimiter: str = "") -> None:
+        self._trie.LoadSubstitutionMatrix(str(path), delimiter)
+
     def search_with_matrix(
         self,
         *,
