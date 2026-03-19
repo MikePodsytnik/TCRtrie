@@ -1548,4 +1548,5 @@ void Trie::PrintMatrix() {
             std::cout << std::setw(6) << std::fixed << std::setprecision(2) << substitutionMatrix_[row][col];
         std::cout << "\n";
     }
+    std::cout << std::endl;
 }
