@@ -1518,9 +1518,21 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
 
     substitutionMatrix_.clear();
 
+    substitutionMatrix_.clear();
+
     for (char r : labels) {
         for (char c : labels) {
-            float cost = (score.at(r).at(r) + score.at(c).at(c)) * 0.5f - score.at(r).at(c);
+            float cost = 0.0f;
+
+            if (r == '-' && c == '-') {
+                cost = 0.0f;
+            } else if (r == '-') {
+                cost = score.at(c).at(c) + std::abs(score.at(r).at(c));
+            } else if (c == '-') {
+                cost = score.at(r).at(r) + std::abs(score.at(r).at(c));
+            } else {
+                cost = (score.at(r).at(r) + score.at(c).at(c)) * 0.5f - score.at(r).at(c);
+            }
 
             if (cost < 0.0f) {
                 std::cerr << "Negative cost after conversion for pair " << r << ", " << c << "\n";
