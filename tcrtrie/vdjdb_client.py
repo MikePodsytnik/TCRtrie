@@ -25,7 +25,7 @@ class VDJdbClient:
 
         matrix_res = ir.files(__package__).joinpath("data/matrices/blosum62.txt")
         with ir.as_file(matrix_res) as p:
-            self._trie.LoadSubstitutionMatrix(str(p))
+            self._trie.LoadSubstitutionMatrix(str(p), "", 1.5)
 
     def _load_table(self) -> pd.DataFrame:
         con = sqlite3.connect(self._sqlite_path)
@@ -33,6 +33,17 @@ class VDJdbClient:
             return pd.read_sql_query("SELECT * FROM vdjdb", con)
         finally:
             con.close()
+
+    def _normalize_query(self, query) -> str:
+        if not isinstance(query, str):
+            raise TypeError("query must be a string")
+        query = query.strip().upper()
+        if not query:
+            raise ValueError("query must not be empty")
+        return query
+
+    def _normalize_queries(self, queries: Sequence[str]) -> list[str]:
+        return [self._normalize_query(q) for q in queries]
 
     @property
     def trie(self) -> Trie:
@@ -48,6 +59,17 @@ class VDJdbClient:
     def __dataframe__(self, nan_as_null: bool = False, allow_copy: bool = True):
         return self._df.copy(deep=False).__dataframe__(nan_as_null=nan_as_null, allow_copy=allow_copy)
 
+    def load_matrix(
+            self,
+            path: str | Path,
+            delimiter: str = "",
+            gapFactor: float = 1.5,
+    ) -> None:
+        self._trie.LoadSubstitutionMatrix(str(path), delimiter, gapFactor)
+
+    def print_matrix(self) -> None:
+        self._trie.PrintMatrix()
+
     def search(
         self,
         *,
@@ -59,6 +81,8 @@ class VDJdbClient:
         vGeneFilter: Optional[str] = None,
         jGeneFilter: Optional[str] = None,
     ) -> pd.DataFrame:
+        query = self._normalize_query(query)
+
         raw = self._trie.SearchIndices(
             query=query,
             maxSubstitution=maxSubstitution,
@@ -92,7 +116,8 @@ class VDJdbClient:
         vGeneFilters: Optional[Sequence[str]] = None,
         jGeneFilters: Optional[Sequence[str]] = None,
     ) -> pd.DataFrame:
-        qs = list(queries)
+        qs = self._normalize_queries(queries)
+
         if not qs:
             return self._empty_all.copy()
 
@@ -138,9 +163,6 @@ class VDJdbClient:
 
         return pd.concat(frames, ignore_index=True, copy=False)
 
-    def load_matrix(self, path: str | Path, delimiter: str = "") -> None:
-        self._trie.LoadSubstitutionMatrix(str(path), delimiter)
-
     def search_with_matrix(
         self,
         *,
@@ -149,6 +171,8 @@ class VDJdbClient:
         vGeneFilter: Optional[str] = None,
         jGeneFilter: Optional[str] = None,
     ) -> pd.DataFrame:
+        query = self._normalize_query(query)
+
         raw = self._trie.SearchIndicesWithMatrix(
             query=query,
             maxCost=maxCost,
@@ -176,7 +200,8 @@ class VDJdbClient:
         vGeneFilters: Optional[Sequence[str]] = None,
         jGeneFilters: Optional[Sequence[str]] = None,
     ) -> pd.DataFrame:
-        qs = list(queries)
+        qs = self._normalize_queries(queries)
+
         if not qs:
             return pd.DataFrame(columns=["query", "cost", *self._columns])
 

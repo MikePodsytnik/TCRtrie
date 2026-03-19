@@ -61,9 +61,9 @@ public:
 
     ~Trie();
 
-    void SetMaxQueryLength(int newMaxQueryLength);
-    void LoadSubstitutionMatrix(const std::string& matrixPath, const std::string& delimiter = "");
-    void SetDeletionScore(float deletionScore);
+    void LoadSubstitutionMatrix(const std::string& matrixPath,
+                            const std::string& delimiter = "",
+                            float gapFactor = 1.5f);
     void PrintMatrix();
 
     std::vector<std::string> Search(const std::string& query, int maxEdits);
@@ -161,8 +161,6 @@ public:
 
 private:
     bool useSubstitutionMatrix_ = false;
-    int maxQueryLength_ = 64;
-    float deletionScore_ = -6.0f;
 
     std::unordered_map<char, std::unordered_map<char, float>> substitutionMatrix_;
 
@@ -178,8 +176,6 @@ private:
 
     void DeleteTrie(TrieNode* node);
     TrieNode* CopyTrie(const TrieNode* node);
-
-    void UpdateSubstitutionMatrix(float deletionScore);
 
     void SearchSubstitutionOnly(
         const std::string& query,

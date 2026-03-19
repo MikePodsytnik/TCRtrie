@@ -3,14 +3,21 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cctype>
 #include <deque>
 #include <fstream>
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <limits>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+
+namespace {
+    constexpr int MAX_Q = 64;
+}
 
 Trie::Trie(const std::string& dataPath) {
     root_ = new TrieNode();
@@ -24,7 +31,8 @@ Trie::Trie(const std::vector<std::string>& sequences,
         root_(new TrieNode()),
         sequences_(sequences),
         vGenes_(vGenes),
-        jGenes_(jGenes) {
+        jGenes_(jGenes),
+        groupIds_(sequences.size(), 0) {
     BuildTrie();
 }
 
@@ -32,10 +40,10 @@ Trie::Trie() : root_(new TrieNode()) {}
 
 Trie::Trie(const Trie& other)
         : root_(nullptr),
-          maxQueryLength_(other.maxQueryLength_),
           useSubstitutionMatrix_(other.useSubstitutionMatrix_),
           substitutionMatrix_(other.substitutionMatrix_),
           sequences_(other.sequences_),
+          groupIds_(other.groupIds_),
           vGenes_(other.vGenes_),
           jGenes_(other.jGenes_) {
     root_ = CopyTrie(other.root_);
@@ -43,10 +51,10 @@ Trie::Trie(const Trie& other)
 
 Trie::Trie(Trie&& other) noexcept
         : root_(other.root_),
-          maxQueryLength_(other.maxQueryLength_),
           useSubstitutionMatrix_(other.useSubstitutionMatrix_),
           substitutionMatrix_(std::move(other.substitutionMatrix_)),
           sequences_(std::move(other.sequences_)),
+          groupIds_(std::move(other.groupIds_)),
           vGenes_(std::move(other.vGenes_)),
           jGenes_(std::move(other.jGenes_)) {
     other.root_ = nullptr;
@@ -55,10 +63,10 @@ Trie::Trie(Trie&& other) noexcept
 Trie& Trie::operator=(const Trie& other) {
     if (this != &other) {
         DeleteTrie(root_);
-        maxQueryLength_ = other.maxQueryLength_;
         useSubstitutionMatrix_ = other.useSubstitutionMatrix_;
         substitutionMatrix_ = other.substitutionMatrix_;
         sequences_ = other.sequences_;
+        groupIds_ = other.groupIds_;
         vGenes_ = other.vGenes_;
         jGenes_ = other.jGenes_;
         root_ = CopyTrie(other.root_);
@@ -70,10 +78,10 @@ Trie& Trie::operator=(Trie&& other) noexcept {
     if (this != &other) {
         DeleteTrie(root_);
         root_ = other.root_;
-        maxQueryLength_ = other.maxQueryLength_;
         useSubstitutionMatrix_ = other.useSubstitutionMatrix_;
         substitutionMatrix_ = std::move(other.substitutionMatrix_);
         sequences_ = std::move(other.sequences_);
+        groupIds_ = std::move(other.groupIds_);
         vGenes_ = std::move(other.vGenes_);
         jGenes_ = std::move(other.jGenes_);
         other.root_ = nullptr;
@@ -88,11 +96,11 @@ Trie::~Trie() {
 std::vector<std::string> Trie::Search(const std::string& query, int maxEdits) {
     std::vector<std::string> results;
     int queryLength = static_cast<int>(query.size());
-    if (queryLength > maxQueryLength_) {
+    if (queryLength >= MAX_Q) {
         std::cerr << "Query length exceeds maximum allowed length." << std::endl;
         return results;
     }
-    static constexpr int MAX_Q = 33;
+    
     int initialRow[MAX_Q];
     for (int i = 0; i <= queryLength; ++i) initialRow[i] = i;
     SearchRecursive(query, maxEdits, root_, initialRow, queryLength, results);
@@ -112,9 +120,9 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     std::vector<AIRREntity> results;
     int queryLength = static_cast<int>(query.size());
 
-    if (queryLength > maxQueryLength_) {
+    if (queryLength >= MAX_Q) {
         std::cerr << query << " :query length exceeds maximum allowed length("
-                  << maxQueryLength_ << ")" << std::endl;
+                  << MAX_Q - 1 << ")" << std::endl;
         return results;
     }
 
@@ -127,15 +135,12 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     if (maxSubstitution >= *maxEdits
         && maxInsertion >= *maxEdits
         && maxDeletion >= *maxEdits) {
-        static constexpr int MAX_Q = 33;
         int initialRow[MAX_Q];
         for (int i = 0; i <= queryLength; ++i) initialRow[i] = i;
         SearchRecursiveAIRR(query, *maxEdits, root_, initialRow, queryLength,
                             results, vGeneFilter, jGeneFilter);
         return results;
     }
-
-    static constexpr int MAX_Q = 33;
 
     int initialRowSimple[MAX_Q];
     for (int i = 0; i <= queryLength; ++i) initialRowSimple[i] = i;
@@ -172,9 +177,9 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
     std::vector<std::pair<size_t, int>> results;
     int queryLength = static_cast<int>(query.size());
 
-    if (queryLength > maxQueryLength_) {
+    if (queryLength >= MAX_Q) {
         std::cerr << query << " :query length exceeds maximum allowed length("
-                  << maxQueryLength_ << ")" << std::endl;
+                  << MAX_Q - 1 << ")" << std::endl;
         return results;
     }
 
@@ -187,15 +192,12 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
     if (maxSubstitution >= *maxEdits
         && maxInsertion >= *maxEdits
         && maxDeletion >= *maxEdits) {
-        static constexpr int MAX_Q = 33;
         int initialRow[MAX_Q];
         for (int i = 0; i <= queryLength; ++i) initialRow[i] = i;
         SearchRecursiveIDs(query, *maxEdits, root_, initialRow, queryLength,
                            results, vGeneFilter, jGeneFilter);
         return results;
     }
-
-    static constexpr int MAX_Q = 33;
 
     int initialRowSimple[MAX_Q];
     for (int i = 0; i <= queryLength; ++i) initialRowSimple[i] = i;
@@ -221,11 +223,11 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
 
 bool Trie::SearchAny(const std::string& query, int maxEdits) {
     int queryLength = static_cast<int>(query.size());
-    if (queryLength > maxQueryLength_) {
+
+    if (queryLength >= MAX_Q) {
         std::cerr << "Query length exceeds maximum allowed length." << std::endl;
         return false;
     }
-    static constexpr int MAX_Q = 33;
     int initialRow[MAX_Q];
     for (int i = 0; i <= queryLength; ++i) initialRow[i] = i;
     return SearchAnyRecursive(query, maxEdits, root_, initialRow, queryLength);
@@ -242,12 +244,11 @@ std::vector<AIRREntity> Trie::SearchWithMatrix(const std::string& query, float m
         return results;
     }
 
-    if (queryLength > maxQueryLength_) {
+    if (queryLength >= MAX_Q) {
         std::cerr << "Query length exceeds maximum allowed length." << std::endl;
         return results;
     }
 
-    static constexpr int MAX_Q = 33;
     float initialRow[MAX_Q];
     initialRow[0] = 0.0f;
     for (int i = 1; i <= queryLength; ++i) {
@@ -272,12 +273,12 @@ std::vector<std::pair<size_t, float>> Trie::SearchIndicesWithMatrix(
         std::cerr << "No substitution matrix is entered, only Levenshtein distance search is available" << std::endl;
         return results;
     }
-    if (queryLength > maxQueryLength_) {
+
+    if (queryLength >= MAX_Q) {
         std::cerr << "Query length exceeds maximum allowed length." << std::endl;
         return results;
     }
 
-    static constexpr int MAX_Q = 33;
     float initialRow[MAX_Q];
     initialRow[0] = 0.0f;
     for (int i = 1; i <= queryLength; ++i) {
@@ -805,8 +806,6 @@ void Trie::SearchRecursive(const std::string& query, int maxEdits,
     }
     if (minVal > maxEdits) return;
 
-    static constexpr int MAX_Q = 33;
-
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
         if (!child) continue;
@@ -852,8 +851,6 @@ void Trie::SearchRecursiveAIRR(const std::string& query, int maxEdits,
     }
     if (minVal > maxEdits) return;
 
-    static constexpr int MAX_Q = 33;
-
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
         if (!child) continue;
@@ -897,8 +894,6 @@ void Trie::SearchRecursiveIDs(const std::string& query, int maxEdits,
         if (prevRow[j] < minVal) minVal = prevRow[j];
     }
     if (minVal > maxEdits) return;
-
-    static constexpr int MAX_Q = 33;
 
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
@@ -961,8 +956,6 @@ void Trie::SearchRecursiveDetailed(
         if (prevRowSimple[j] < minVal) minVal = prevRowSimple[j];
     }
     if (minVal > maxEdits) return;
-
-    static constexpr int MAX_Q = 33;
 
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
@@ -1065,8 +1058,6 @@ void Trie::SearchRecursiveCost(const std::string& query, float maxCost,
         }
     }
 
-    static constexpr int MAX_Q = 33;
-
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
         if (!child) continue;
@@ -1113,8 +1104,6 @@ void Trie::SearchRecursiveCostIDs(const std::string& query, float maxCost,
             }
         }
     }
-
-    static constexpr int MAX_Q = 33;
 
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
@@ -1164,7 +1153,6 @@ bool Trie::SearchAnyRecursive(const std::string& query, int maxEdits,
     }
     if (minVal > maxEdits) return false;
 
-    static constexpr int MAX_Q = 33;
     for (int ci = 0; ci < kAlphabetSize; ++ci) {
         TrieNode* child = node->children[ci];
         if (!child) continue;
@@ -1233,133 +1221,313 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
     return newNode;
 }
 
-void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
-                                  const std::string& delimiter) {
-    std::ifstream file(matrixPath);
-    if (!file) {
-        std::cerr << "Cannot open matrix\n";
-        return;
+namespace {
+    const std::string kAminoAcids = "ACDEFGHIKLMNPQRSTVWY";
+
+    std::string Trim(const std::string& s) {
+        std::size_t l = 0;
+        while (l < s.size() && std::isspace(static_cast<unsigned char>(s[l]))) {
+            ++l;
+        }
+
+        std::size_t r = s.size();
+        while (r > l && std::isspace(static_cast<unsigned char>(s[r - 1]))) {
+            --r;
+        }
+
+        return s.substr(l, r - l);
     }
 
-    auto split = [](const std::string& s, const std::string& delim) -> std::vector<std::string> {
-        std::vector<std::string> parts;
+    void RemoveBom(std::string& s) {
+        if (s.size() >= 3 &&
+            static_cast<unsigned char>(s[0]) == 0xEF &&
+            static_cast<unsigned char>(s[1]) == 0xBB &&
+            static_cast<unsigned char>(s[2]) == 0xBF) {
+            s.erase(0, 3);
+        }
+    }
 
-        if (delim.empty()) {
-            std::istringstream iss(s);
+    std::vector<std::string> SplitLine(const std::string& line, const std::string& delimiter) {
+        std::vector<std::string> result;
+
+        if (delimiter.empty()) {
+            std::istringstream iss(line);
             std::string token;
             while (iss >> token) {
-                parts.push_back(token);
+                result.push_back(token);
             }
-            return parts;
+            return result;
         }
 
         std::size_t start = 0;
         while (true) {
-            std::size_t pos = s.find(delim, start);
+            std::size_t pos = line.find(delimiter, start);
             if (pos == std::string::npos) {
-                parts.push_back(s.substr(start));
+                result.push_back(Trim(line.substr(start)));
                 break;
             }
-            parts.push_back(s.substr(start, pos - start));
-            start = pos + delim.size();
+            result.push_back(Trim(line.substr(start, pos - start)));
+            start = pos + delimiter.size();
         }
 
-        return parts;
-    };
+        return result;
+    }
 
-    std::vector<char> letters;
-    std::unordered_map<char, std::unordered_map<char, float>> rawScores;
-    bool isCostMatrix = true;
-    bool isDiagonalMatrix = true;
+    char ParseLabel(std::string token) {
+        if (token.size() >= 3 &&
+            static_cast<unsigned char>(token[0]) == 0xEF &&
+            static_cast<unsigned char>(token[1]) == 0xBB &&
+            static_cast<unsigned char>(token[2]) == 0xBF) {
+            token.erase(0, 3);
+        }
+
+        token = Trim(token);
+
+        if (token.size() != 1) {
+            throw std::runtime_error("Invalid matrix label: '" + token + "'");
+        }
+
+        return static_cast<char>(std::toupper(static_cast<unsigned char>(token[0])));
+    }
+
+    std::string Join(const std::vector<char>& values) {
+        std::ostringstream out;
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            if (i) {
+                out << ", ";
+            }
+            out << values[i];
+        }
+        return out.str();
+    }
+}
+
+void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
+                                  const std::string& delimiter,
+                                  float gapFactor) {
+    if (gapFactor < 1.0f) {
+        std::cerr << "gapFactor must be >= 1.0\n";
+        throw std::runtime_error("Invalid gapFactor");
+    }
+
+    std::ifstream file(matrixPath);
+    if (!file) {
+        std::cerr << "Cannot open matrix: " << matrixPath << "\n";
+        throw std::runtime_error("Cannot open matrix");
+    }
 
     std::string line;
-
-    while (std::getline(file, line)) {
-        if (!line.empty()) break;
+    if (!std::getline(file, line)) {
+        std::cerr << "Matrix file is empty\n";
+        throw std::runtime_error("Empty matrix file");
     }
 
-    if (line.empty()) {
-        std::cerr << "Empty matrix file\n";
-        return;
+    std::vector<std::string> header = SplitLine(line, delimiter);
+    if (header.empty()) {
+        std::cerr << "Matrix header is empty\n";
+        throw std::runtime_error("Invalid matrix header");
     }
+    RemoveBom(header[0]);
 
-    {
-        auto headerTokens = split(line, delimiter);
-        for (const auto& token : headerTokens) {
-            if (token.empty()) continue;
-            letters.push_back(token[0]);
+    if (delimiter.empty()) {
+        if (header.size() != 20 && header.size() != 21) {
+            std::cerr << "Matrix must contain 20 or 21 columns, got " << header.size() << "\n";
+            throw std::runtime_error("Invalid matrix size");
+        }
+    } else {
+        if (header.empty() || !Trim(header[0]).empty()) {
+            std::cerr << "Top-left matrix cell must be empty\n";
+            throw std::runtime_error("Invalid matrix header");
+        }
+        header.erase(header.begin());
+
+        if (header.size() != 20 && header.size() != 21) {
+            std::cerr << "Matrix must contain 20 or 21 columns, got " << header.size() << "\n";
+            throw std::runtime_error("Invalid matrix size");
         }
     }
 
-    rawScores['-']['-'] = std::fabs(deletionScore_);
-
-    for (char r : letters) {
-        rawScores[r]['-'] = deletionScore_;
-        rawScores['-'][r] = deletionScore_;
+    std::vector<char> cols;
+    for (const std::string& token : header) {
+        cols.push_back(ParseLabel(token));
     }
 
-    int rowIndex = 0;
+    std::set<char> colSet(cols.begin(), cols.end());
+    if (colSet.size() != cols.size()) {
+        std::cerr << "Duplicate column labels found\n";
+        throw std::runtime_error("Duplicate column labels");
+    }
+
+    for (char c : cols) {
+        if (kAminoAcids.find(c) == std::string::npos && c != '-') {
+            std::cerr << "Unexpected column label: " << c << "\n";
+            throw std::runtime_error("Unexpected column label");
+        }
+    }
+
+    std::vector<char> missing;
+    for (char aa : kAminoAcids) {
+        if (colSet.find(aa) == colSet.end()) {
+            missing.push_back(aa);
+        }
+    }
+
+    if (!missing.empty()) {
+        std::cerr << "Missing amino acids: " << Join(missing) << "\n";
+        throw std::runtime_error("Missing amino acids in matrix");
+    }
+
+    std::unordered_map<char, std::unordered_map<char, float>> score;
+    std::vector<char> rows;
+
     while (std::getline(file, line)) {
-        if (line.empty()) continue;
+        if (Trim(line).empty()) {
+            continue;
+        }
 
-        auto tokens = split(line, delimiter);
-        if (tokens.empty()) continue;
+        std::vector<std::string> parts = SplitLine(line, delimiter);
+        if (parts.size() != cols.size() + 1) {
+            std::cerr << "Invalid row width\n";
+            throw std::runtime_error("Invalid matrix row");
+        }
 
-        std::vector<std::string> filtered;
-        filtered.reserve(tokens.size());
-        for (const auto& t : tokens) {
-            if (!t.empty()) {
-                filtered.push_back(t);
+        char row = ParseLabel(parts[0]);
+        rows.push_back(row);
+
+        for (std::size_t i = 0; i < cols.size(); ++i) {
+            try {
+                std::string token = Trim(parts[i + 1]);
+                std::size_t pos = 0;
+                float value = std::stof(token, &pos);
+                if (pos != token.size() || !std::isfinite(value)) {
+                    throw std::runtime_error("");
+                }
+                score[row][cols[i]] = value;
+            } catch (...) {
+                std::cerr << "Invalid numeric value in row " << row << ", column " << cols[i] << "\n";
+                throw std::runtime_error("Invalid numeric value in matrix");
             }
         }
-        if (filtered.empty()) continue;
-
-        char rowLetter = filtered[0][0];
-
-        if (filtered.size() != letters.size() + 1) {
-            std::cerr << "Invalid matrix row format for row " << rowLetter
-                      << ": expected " << (letters.size() + 1)
-                      << " tokens, got " << filtered.size() << std::endl;
-            return;
-        }
-
-        for (std::size_t i = 0; i < letters.size(); ++i) {
-            char colLetter = letters[i];
-            float v = std::stof(filtered[i + 1]);
-
-            rawScores[rowLetter][colLetter] = v;
-            rawScores[colLetter][rowLetter] = v;
-
-            if (v < 0) isCostMatrix = false;
-            if (rowLetter == colLetter && v != 0) isDiagonalMatrix = false;
-        }
-
-        ++rowIndex;
     }
 
-    deletionScore_ = rawScores['-']['-'];
-    std::vector<char> allLetters = letters;
-    allLetters.push_back('-');
+    if (rows.size() != cols.size()) {
+        std::cerr << "Matrix is not square\n";
+        throw std::runtime_error("Matrix is not square");
+    }
+
+    std::set<char> rowSet(rows.begin(), rows.end());
+    if (rowSet.size() != rows.size()) {
+        std::cerr << "Duplicate row labels found\n";
+        throw std::runtime_error("Duplicate row labels");
+    }
+
+    for (char r : rows) {
+        if (kAminoAcids.find(r) == std::string::npos && r != '-') {
+            std::cerr << "Unexpected row label: " << r << "\n";
+            throw std::runtime_error("Unexpected row label");
+        }
+    }
+
+    missing.clear();
+    for (char aa : kAminoAcids) {
+        if (rowSet.find(aa) == rowSet.end()) {
+            missing.push_back(aa);
+        }
+    }
+
+    if (!missing.empty()) {
+        std::cerr << "Missing amino acids: " << Join(missing) << "\n";
+        throw std::runtime_error("Missing amino acids in matrix");
+    }
+
+    if (rowSet != colSet) {
+        std::cerr << "Row and column labels do not match\n";
+        throw std::runtime_error("Row and column labels do not match");
+    }
+
+    bool hasGap = colSet.find('-') != colSet.end();
+
+    auto validateDiagonalDominance = [&](const std::vector<char>& labels) {
+        std::vector<char> bad;
+
+        for (char aa : kAminoAcids) {
+            float diag = score.at(aa).at(aa);
+            bool ok = true;
+
+            for (char other : labels) {
+                if (other == aa) {
+                    continue;
+                }
+
+                if (diag <= score.at(aa).at(other) || diag <= score.at(other).at(aa)) {
+                    ok = false;
+                    break;
+                }
+            }
+
+            if (!ok) {
+                bad.push_back(aa);
+            }
+        }
+
+        if (!bad.empty()) {
+            std::cerr << "Diagonal is not strictly greater for: " << Join(bad) << "\n";
+            throw std::runtime_error("Invalid diagonal values");
+        }
+    };
+
+    validateDiagonalDominance(cols);
+
+    std::vector<char> labels = cols;
+
+    if (!hasGap) {
+        score['-']['-'] = 0.0f;
+
+        for (char aa : kAminoAcids) {
+            float minValue = std::numeric_limits<float>::infinity();
+
+            for (char rowAa : kAminoAcids) {
+                minValue = std::min(minValue, score.at(rowAa).at(aa));
+            }
+
+            float gapScore = (minValue < 0.0f)
+                                 ? minValue * gapFactor
+                                 : minValue / gapFactor;
+
+            score[aa]['-'] = gapScore;
+            score['-'][aa] = gapScore;
+        }
+
+        labels.push_back('-');
+        validateDiagonalDominance(labels);
+    } else {
+        if (score.find('-') == score.end() ||
+            score.at('-').find('-') == score.at('-').end()) {
+            std::cerr << "Gap row is incomplete\n";
+            throw std::runtime_error("Incomplete gap row");
+        }
+
+        for (char aa : labels) {
+            if (score.at('-').find(aa) == score.at('-').end() ||
+                score.at(aa).find('-') == score.at(aa).end()) {
+                std::cerr << "Gap row or column is incomplete for amino acid " << aa << "\n";
+                throw std::runtime_error("Incomplete gap row/column");
+            }
+        }
+    }
 
     substitutionMatrix_.clear();
 
-    if (isCostMatrix && isDiagonalMatrix) {
-        substitutionMatrix_ = rawScores;
-    } else {
-        for (char r : allLetters) {
-            for (char c : allLetters) {
-                substitutionMatrix_[r][c] =
-                    (rawScores[r][r] + rawScores[c][c]) * 0.5f - rawScores[r][c];
-            }
-        }
-    }
+    for (char r : labels) {
+        for (char c : labels) {
+            float cost = (score.at(r).at(r) + score.at(c).at(c)) * 0.5f - score.at(r).at(c);
 
-    for (char r : allLetters) {
-        for (char c : allLetters) {
-            if (substitutionMatrix_[r][c] < 0) {
-                std::cerr << "Negative cost: " << r << " vs " << c
-                          << " = " << substitutionMatrix_[r][c] << std::endl;
+            if (cost < 0.0f) {
+                std::cerr << "Negative cost after conversion for pair " << r << ", " << c << "\n";
+                throw std::runtime_error("Negative cost after conversion");
             }
+
+            substitutionMatrix_[r][c] = cost;
         }
     }
 
@@ -1380,31 +1548,4 @@ void Trie::PrintMatrix() {
             std::cout << std::setw(6) << std::fixed << std::setprecision(2) << substitutionMatrix_[row][col];
         std::cout << "\n";
     }
-}
-
-void Trie::SetMaxQueryLength(int n) {
-    maxQueryLength_ = n;
-}
-
-void Trie::UpdateSubstitutionMatrix(float deletionScore) {
-    std::vector<char> keys;
-    keys.reserve(substitutionMatrix_.size());
-    for (const auto& kv : substitutionMatrix_) keys.push_back(kv.first);
-    for (auto c : keys) {
-        if (c == '-') continue;
-        substitutionMatrix_[c]['-'] -= deletionScore_ * 0.5f;
-        substitutionMatrix_['-'][c] -= deletionScore_ * 0.5f;
-        substitutionMatrix_[c]['-'] += std::fabs(deletionScore) * 0.5f;
-        substitutionMatrix_['-'][c] += std::fabs(deletionScore) * 0.5f;
-    }
-}
-
-void Trie::SetDeletionScore(float deletionScore) {
-    std::cout << "New deletion score: " << deletionScore << std::endl;
-    if (useSubstitutionMatrix_) {
-        std::cout << "New Substitution-Score Matrix:" << std::endl;
-        UpdateSubstitutionMatrix(deletionScore);
-        PrintMatrix();
-    }
-    deletionScore_ = deletionScore;
 }
