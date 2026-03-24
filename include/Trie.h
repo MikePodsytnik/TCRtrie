@@ -3,6 +3,7 @@
 #include "AirrParser.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -47,6 +48,30 @@ public:
         }
     };
 
+    enum class AlignmentOpType {
+        Match,
+        Substitution,
+        Insertion,
+        Deletion
+    };
+
+    struct AlignmentOp {
+        AlignmentOpType type;
+        int queryPos;
+        char queryChar;
+        char targetChar;
+    };
+
+    struct AlignmentResult {
+        std::string queryAligned;
+        std::string targetAligned;
+        int substitutions = 0;
+        int insertions = 0;
+        int deletions = 0;
+        float distance = 0.0f;
+        std::vector<AlignmentOp> ops;
+    };
+
     explicit Trie();
     explicit Trie(const std::string& dataPath);
     explicit Trie(const std::vector<std::string>& sequences,
@@ -62,15 +87,16 @@ public:
     ~Trie();
 
     void LoadSubstitutionMatrix(const std::string& matrixPath,
-                            const std::string& delimiter = "",
-                            float gapFactor = 1.5f);
+                                const std::string& delimiter = "",
+                                float gapFactor = 1.5f);
     void PrintMatrix();
 
     std::vector<std::string> Search(const std::string& query, int maxEdits);
 
-    std::unordered_map<std::string, std::vector<std::string>> Search(
+    std::vector<std::vector<std::string>> Search(
         const std::vector<std::string>& queries,
-        int maxEdits);
+        int maxEdits,
+        std::optional<std::size_t> numThreads = 4);
 
     std::vector<AIRREntity> SearchAIRR(
         const std::string& query,
@@ -81,14 +107,15 @@ public:
         const std::optional<std::string>& vGeneFilter = std::nullopt,
         const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAll(
+    std::vector<std::vector<AIRREntity>> SearchForAll(
         const std::vector<std::string>& queries,
         int maxSubstitution = 0,
         int maxInsertion = 0,
         int maxDeletion = 0,
         std::optional<int> maxEdits = std::nullopt,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
-        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
     std::vector<AIRREntity> SearchWithMatrix(
         const std::string& query,
@@ -96,11 +123,12 @@ public:
         const std::optional<std::string>& vGeneFilter = std::nullopt,
         const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::unordered_map<std::string, std::vector<AIRREntity>> SearchForAllWithMatrix(
+    std::vector<std::vector<AIRREntity>> SearchForAllWithMatrix(
         const std::vector<std::string>& queries,
         float maxCost,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
-        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
     std::vector<std::pair<size_t, int>> SearchIndices(
         const std::string& query,
@@ -111,14 +139,15 @@ public:
         const std::optional<std::string>& vGeneFilter = std::nullopt,
         const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::unordered_map<std::string, std::vector<std::pair<size_t, int>>> SearchIndicesForAll(
+    std::vector<std::vector<std::pair<size_t, int>>> SearchIndicesForAll(
         const std::vector<std::string>& queries,
         int maxSubstitution = 0,
         int maxInsertion = 0,
         int maxDeletion = 0,
         std::optional<int> maxEdits = std::nullopt,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
-        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
     std::vector<std::pair<size_t, float>> SearchIndicesWithMatrix(
         const std::string& query,
@@ -126,11 +155,12 @@ public:
         const std::optional<std::string>& vGeneFilter = std::nullopt,
         const std::optional<std::string>& jGeneFilter = std::nullopt);
 
-    std::unordered_map<std::string, std::vector<std::pair<size_t, float>>> SearchIndicesForAllWithMatrix(
+    std::vector<std::vector<std::pair<size_t, float>>> SearchIndicesForAllWithMatrix(
         const std::vector<std::string>& queries,
         float maxCost,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
-        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
     std::vector<std::vector<int>> SearchGroupIdsForAll(
         const std::vector<std::string>& queries,
@@ -140,7 +170,8 @@ public:
         std::optional<int> maxEdits = std::nullopt,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
         std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
-        bool unique = true);
+        bool unique = true,
+        std::optional<std::size_t> numThreads = 4);
 
     std::unordered_set<AIRREntity> ClusterUsage(
         const std::vector<std::string>& cluster,
@@ -149,15 +180,58 @@ public:
         int maxDeletion = 0,
         std::optional<int> maxEdits = std::nullopt,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
-        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
     std::unordered_set<AIRREntity> ClusterUsageWithMatrix(
         const std::vector<std::string>& cluster,
         float maxCost,
         std::optional<std::vector<std::string>> vGeneFilters = std::nullopt,
-        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt);
+        std::optional<std::vector<std::string>> jGeneFilters = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
     bool SearchAny(const std::string& query, int maxEdits);
+
+    std::optional<AlignmentResult> AlignQueryToTarget(
+        const std::string& query,
+        const std::string& target,
+        std::optional<int> maxSubstitution = std::nullopt,
+        std::optional<int> maxInsertion = std::nullopt,
+        std::optional<int> maxDeletion = std::nullopt,
+        std::optional<int> maxEdits = std::nullopt);
+
+    std::optional<AlignmentResult> AlignIndexHit(
+        const std::string& query,
+        size_t targetIndex,
+        std::optional<int> maxSubstitution = std::nullopt,
+        std::optional<int> maxInsertion = std::nullopt,
+        std::optional<int> maxDeletion = std::nullopt,
+        std::optional<int> maxEdits = std::nullopt);
+
+    std::vector<std::optional<AlignmentResult>> AlignIndexHits(
+        const std::string& query,
+        const std::vector<std::pair<size_t, int>>& hits,
+        std::optional<int> maxSubstitution = std::nullopt,
+        std::optional<int> maxInsertion = std::nullopt,
+        std::optional<int> maxDeletion = std::nullopt,
+        std::optional<int> maxEdits = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
+
+    std::optional<AlignmentResult> AlignQueryToTargetWithMatrix(
+        const std::string& query,
+        const std::string& target,
+        std::optional<float> maxCost = std::nullopt);
+
+    std::optional<AlignmentResult> AlignIndexHitWithMatrix(
+        const std::string& query,
+        size_t targetIndex,
+        std::optional<float> maxCost = std::nullopt);
+
+    std::vector<std::optional<AlignmentResult>> AlignIndexHitsWithMatrix(
+        const std::string& query,
+        const std::vector<std::pair<size_t, float>>& hits,
+        std::optional<float> maxCost = std::nullopt,
+        std::optional<std::size_t> numThreads = 4);
 
 private:
     bool useSubstitutionMatrix_ = false;

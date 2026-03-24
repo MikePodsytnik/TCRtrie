@@ -1,6 +1,7 @@
 #include "Trie.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <cctype>
@@ -10,6 +11,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -17,6 +19,141 @@
 
 namespace {
     constexpr int MAX_Q = 64;
+    constexpr float kFloatEps = 1e-6f;
+
+    std::size_t ResolveThreadCount(std::optional<std::size_t> numThreads, std::size_t taskCount = 0) {
+        std::size_t resolved = numThreads.value_or(4);
+        if (resolved == 0) {
+            resolved = 1;
+        }
+        if (taskCount != 0 && resolved > taskCount) {
+            resolved = taskCount;
+        }
+        return resolved;
+    }
+
+    template <typename Output, typename Worker>
+    std::vector<Output> RunParallelOrdered(std::size_t taskCount,
+                                           std::optional<std::size_t> numThreads,
+                                           Worker&& worker) {
+        if (taskCount == 0) {
+            return {};
+        }
+
+        const std::size_t threadsCount = ResolveThreadCount(numThreads, taskCount);
+        std::vector<Output> result(taskCount);
+        std::atomic<std::size_t> next{0};
+        std::exception_ptr firstException;
+        std::mutex exceptionMutex;
+        std::vector<std::thread> threads;
+        threads.reserve(threadsCount);
+
+        for (std::size_t t = 0; t < threadsCount; ++t) {
+            threads.emplace_back([&]() {
+                try {
+                    while (true) {
+                        const std::size_t i = next.fetch_add(1);
+                        if (i >= taskCount) {
+                            break;
+                        }
+                        result[i] = worker(i);
+                    }
+                } catch (...) {
+                    {
+                        std::lock_guard<std::mutex> lock(exceptionMutex);
+                        if (!firstException) {
+                            firstException = std::current_exception();
+                        }
+                    }
+                    next.store(taskCount);
+                }
+            });
+        }
+
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        if (firstException) {
+            std::rethrow_exception(firstException);
+        }
+
+        return result;
+    }
+
+    struct BoundedTraceState {
+        int16_t sub = 0;
+        int16_t ins = 0;
+        int16_t del = 0;
+        int prevI = -1;
+        int prevJ = -1;
+        int prevK = -1;
+        Trie::AlignmentOpType op = Trie::AlignmentOpType::Match;
+
+        int total() const {
+            return static_cast<int>(sub) + static_cast<int>(ins) + static_cast<int>(del);
+        }
+    };
+
+    bool SameCounts(const BoundedTraceState& lhs, const BoundedTraceState& rhs) {
+        return lhs.sub == rhs.sub && lhs.ins == rhs.ins && lhs.del == rhs.del;
+    }
+
+    bool Dominates(const BoundedTraceState& lhs, const BoundedTraceState& rhs) {
+        return lhs.sub <= rhs.sub && lhs.ins <= rhs.ins && lhs.del <= rhs.del &&
+               (lhs.sub < rhs.sub || lhs.ins < rhs.ins || lhs.del < rhs.del);
+    }
+
+    void AddPrunedState(std::vector<BoundedTraceState>& cell, const BoundedTraceState& candidate) {
+        for (const auto& existing : cell) {
+            if (SameCounts(existing, candidate) || Dominates(existing, candidate)) {
+                return;
+            }
+        }
+
+        cell.erase(std::remove_if(cell.begin(), cell.end(), [&](const BoundedTraceState& existing) {
+            return Dominates(candidate, existing);
+        }), cell.end());
+
+        cell.push_back(candidate);
+    }
+
+    struct MatrixTraceCell {
+        float cost = std::numeric_limits<float>::infinity();
+        int prevI = -1;
+        int prevJ = -1;
+        Trie::AlignmentOpType op = Trie::AlignmentOpType::Match;
+        bool reachable = false;
+    };
+
+    int AlignmentOpPriority(Trie::AlignmentOpType op) {
+        switch (op) {
+            case Trie::AlignmentOpType::Match:
+            case Trie::AlignmentOpType::Substitution:
+                return 0;
+            case Trie::AlignmentOpType::Deletion:
+                return 1;
+            case Trie::AlignmentOpType::Insertion:
+                return 2;
+        }
+        return 3;
+    }
+
+    bool BetterMatrixCandidate(float newCost,
+                               Trie::AlignmentOpType newOp,
+                               const MatrixTraceCell& current) {
+        if (!current.reachable) {
+            return true;
+        }
+        if (newCost + kFloatEps < current.cost) {
+            return true;
+        }
+        if (std::fabs(newCost - current.cost) <= kFloatEps &&
+            AlignmentOpPriority(newOp) < AlignmentOpPriority(current.op)) {
+            return true;
+        }
+        return false;
+    }
 }
 
 Trie::Trie(const std::string& dataPath) {
@@ -100,7 +237,7 @@ std::vector<std::string> Trie::Search(const std::string& query, int maxEdits) {
         std::cerr << "Query length exceeds maximum allowed length." << std::endl;
         return results;
     }
-    
+
     int initialRow[MAX_Q];
     for (int i = 0; i <= queryLength; ++i) initialRow[i] = i;
     SearchRecursive(query, maxEdits, root_, initialRow, queryLength, results);
@@ -291,88 +428,27 @@ std::vector<std::pair<size_t, float>> Trie::SearchIndicesWithMatrix(
     return results;
 }
 
-std::unordered_map<std::string, std::vector<std::string>> Trie::Search(
-        const std::vector<std::string>& queries, int maxEdits) {
-
-    std::unordered_map<std::string, std::vector<std::string>> result;
-    std::vector<std::future<std::pair<std::string, std::vector<std::string>>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < queries.size(); ++i) {
-        const std::string query = queries[i];
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query, maxEdits]() -> std::pair<std::string, std::vector<std::string>> {
-                return { query, this->Search(query, maxEdits) };
-            }));
-
-        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
-            for (auto& fut : futures) {
-                auto completed = fut.get();
-                result[std::move(completed.first)] = std::move(completed.second);
-            }
-            futures.clear();
-        }
-    }
-
-    return result;
-}
-
-std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAll(
+std::vector<std::vector<std::string>> Trie::Search(
         const std::vector<std::string>& queries,
-        int maxSubstitution, int maxInsertion,
-        int maxDeletion, std::optional<int> maxEdits,
-        std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters) {
-
-    if (vGeneFilters && vGeneFilters->size() != queries.size()) {
-        throw std::invalid_argument("vGeneFilters must have the same length as queries");
-    }
-    if (jGeneFilters && jGeneFilters->size() != queries.size()) {
-        throw std::invalid_argument("jGeneFilters must have the same length as queries");
-    }
-
-    std::unordered_map<std::string, std::vector<AIRREntity>> result;
-    std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < queries.size(); ++i) {
-        const std::string query = queries[i];
-
-        const std::optional<std::string> vFilter =
-                vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-        const std::optional<std::string> jFilter =
-                jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
-
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query,
-             maxSubstitution, maxInsertion, maxDeletion,
-             maxEdits, vFilter, jFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
-                return { query, this->SearchAIRR(query, maxSubstitution, maxInsertion,
-                                                maxDeletion, maxEdits, vFilter, jFilter) };
-            }));
-
-        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
-            for (auto& fut : futures) {
-                auto completed = fut.get();
-                result[std::move(completed.first)] = std::move(completed.second);
-            }
-            futures.clear();
-        }
-    }
-
-    return result;
+        int maxEdits,
+        std::optional<std::size_t> numThreads) {
+    return RunParallelOrdered<std::vector<std::string>>(
+        queries.size(),
+        numThreads,
+        [&](std::size_t i) {
+            return this->Search(queries[i], maxEdits);
+        });
 }
 
-std::unordered_map<std::string, std::vector<std::pair<size_t, int>>> Trie::SearchIndicesForAll(
+std::vector<std::vector<AIRREntity>> Trie::SearchForAll(
         const std::vector<std::string>& queries,
-        int maxSubstitution, int maxInsertion,
-        int maxDeletion, std::optional<int> maxEdits,
+        int maxSubstitution,
+        int maxInsertion,
+        int maxDeletion,
+        std::optional<int> maxEdits,
         std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters) {
+        std::optional<std::vector<std::string>> jGeneFilters,
+        std::optional<std::size_t> numThreads) {
 
     if (vGeneFilters && vGeneFilters->size() != queries.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as queries");
@@ -381,49 +457,35 @@ std::unordered_map<std::string, std::vector<std::pair<size_t, int>>> Trie::Searc
         throw std::invalid_argument("jGeneFilters must have the same length as queries");
     }
 
-    std::unordered_map<std::string, std::vector<std::pair<size_t, int>>> result;
-    std::vector<std::future<std::pair<std::string, std::vector<std::pair<size_t, int>>>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < queries.size(); ++i) {
-        const std::string query = queries[i];
-
-        const std::optional<std::string> vFilter =
+    return RunParallelOrdered<std::vector<AIRREntity>>(
+        queries.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
                 vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-        const std::optional<std::string> jFilter =
+            const std::optional<std::string> jFilter =
                 jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
 
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query,
-             maxSubstitution, maxInsertion, maxDeletion,
-             maxEdits, vFilter, jFilter]() -> std::pair<std::string, std::vector<std::pair<size_t, int>>> {
-                return { query, this->SearchIndices(query,
-                                                    maxSubstitution,
-                                                    maxInsertion,
-                                                    maxDeletion,
-                                                    maxEdits,
-                                                    vFilter,
-                                                    jFilter) };
-            }));
-
-        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
-            for (auto& fut : futures) {
-                auto completed = fut.get();
-                result[std::move(completed.first)] = std::move(completed.second);
-            }
-            futures.clear();
-        }
-    }
-
-    return result;
+            return this->SearchAIRR(
+                queries[i],
+                maxSubstitution,
+                maxInsertion,
+                maxDeletion,
+                maxEdits,
+                vFilter,
+                jFilter);
+        });
 }
 
-std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithMatrix(
-        const std::vector<std::string>& queries, float maxCost,
+std::vector<std::vector<std::pair<size_t, int>>> Trie::SearchIndicesForAll(
+        const std::vector<std::string>& queries,
+        int maxSubstitution,
+        int maxInsertion,
+        int maxDeletion,
+        std::optional<int> maxEdits,
         std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters) {
+        std::optional<std::vector<std::string>> jGeneFilters,
+        std::optional<std::size_t> numThreads) {
 
     if (vGeneFilters && vGeneFilters->size() != queries.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as queries");
@@ -432,41 +494,32 @@ std::unordered_map<std::string, std::vector<AIRREntity>> Trie::SearchForAllWithM
         throw std::invalid_argument("jGeneFilters must have the same length as queries");
     }
 
-    std::unordered_map<std::string, std::vector<AIRREntity>> result;
-    std::vector<std::future<std::pair<std::string, std::vector<AIRREntity>>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < queries.size(); ++i) {
-        const std::string query = queries[i];
-
-        const std::optional<std::string> vFilter =
+    return RunParallelOrdered<std::vector<std::pair<size_t, int>>>(
+        queries.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
                 vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-        const std::optional<std::string> jFilter =
+            const std::optional<std::string> jFilter =
                 jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
 
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query, maxCost, vFilter, jFilter]() -> std::pair<std::string, std::vector<AIRREntity>> {
-                return { query, this->SearchWithMatrix(query, maxCost, vFilter, jFilter) };
-            }));
-
-        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
-            for (auto& fut : futures) {
-                auto completed = fut.get();
-                result[std::move(completed.first)] = std::move(completed.second);
-            }
-            futures.clear();
-        }
-    }
-
-    return result;
+            return this->SearchIndices(
+                queries[i],
+                maxSubstitution,
+                maxInsertion,
+                maxDeletion,
+                maxEdits,
+                vFilter,
+                jFilter);
+        });
 }
 
-std::unordered_map<std::string, std::vector<std::pair<size_t, float>>> Trie::SearchIndicesForAllWithMatrix(
-        const std::vector<std::string>& queries, float maxCost,
+std::vector<std::vector<AIRREntity>> Trie::SearchForAllWithMatrix(
+        const std::vector<std::string>& queries,
+        float maxCost,
         std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters) {
+        std::optional<std::vector<std::string>> jGeneFilters,
+        std::optional<std::size_t> numThreads) {
 
     if (vGeneFilters && vGeneFilters->size() != queries.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as queries");
@@ -475,45 +528,54 @@ std::unordered_map<std::string, std::vector<std::pair<size_t, float>>> Trie::Sea
         throw std::invalid_argument("jGeneFilters must have the same length as queries");
     }
 
-    std::unordered_map<std::string, std::vector<std::pair<size_t, float>>> result;
-    std::vector<std::future<std::pair<std::string, std::vector<std::pair<size_t, float>>>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < queries.size(); ++i) {
-        const std::string query = queries[i];
-
-        const std::optional<std::string> vFilter =
+    return RunParallelOrdered<std::vector<AIRREntity>>(
+        queries.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
                 vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-        const std::optional<std::string> jFilter =
+            const std::optional<std::string> jFilter =
                 jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
+            return this->SearchWithMatrix(queries[i], maxCost, vFilter, jFilter);
+        });
+}
 
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query, maxCost, vFilter, jFilter]()
-                -> std::pair<std::string, std::vector<std::pair<size_t, float>>> {
-                return { query, this->SearchIndicesWithMatrix(query, maxCost, vFilter, jFilter) };
-            }));
+std::vector<std::vector<std::pair<size_t, float>>> Trie::SearchIndicesForAllWithMatrix(
+        const std::vector<std::string>& queries,
+        float maxCost,
+        std::optional<std::vector<std::string>> vGeneFilters,
+        std::optional<std::vector<std::string>> jGeneFilters,
+        std::optional<std::size_t> numThreads) {
 
-        if (futures.size() >= maxConcurrent || i + 1 == queries.size()) {
-            for (auto& fut : futures) {
-                auto completed = fut.get();
-                result[std::move(completed.first)] = std::move(completed.second);
-            }
-            futures.clear();
-        }
+    if (vGeneFilters && vGeneFilters->size() != queries.size()) {
+        throw std::invalid_argument("vGeneFilters must have the same length as queries");
+    }
+    if (jGeneFilters && jGeneFilters->size() != queries.size()) {
+        throw std::invalid_argument("jGeneFilters must have the same length as queries");
     }
 
-    return result;
+    return RunParallelOrdered<std::vector<std::pair<size_t, float>>>(
+        queries.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
+                vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
+            const std::optional<std::string> jFilter =
+                jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
+            return this->SearchIndicesWithMatrix(queries[i], maxCost, vFilter, jFilter);
+        });
 }
 
 std::vector<std::vector<int>> Trie::SearchGroupIdsForAll(
     const std::vector<std::string>& queries,
-    int maxSubstitution, int maxInsertion,
-    int maxDeletion, std::optional<int> maxEdits,
+    int maxSubstitution,
+    int maxInsertion,
+    int maxDeletion,
+    std::optional<int> maxEdits,
     std::optional<std::vector<std::string>> vGeneFilters,
     std::optional<std::vector<std::string>> jGeneFilters,
-    bool unique) {
+    bool unique,
+    std::optional<std::size_t> numThreads) {
     if (vGeneFilters && vGeneFilters->size() != queries.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as queries");
     }
@@ -521,79 +583,57 @@ std::vector<std::vector<int>> Trie::SearchGroupIdsForAll(
         throw std::invalid_argument("jGeneFilters must have the same length as queries");
     }
 
-    const std::size_t n = queries.size();
-    std::vector<std::vector<int>> result(n);
+    return RunParallelOrdered<std::vector<int>>(
+        queries.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
+                vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
+            const std::optional<std::string> jFilter =
+                jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
 
-    std::vector<std::future<void>> futures;
+            auto hits = this->SearchIndices(
+                queries[i],
+                maxSubstitution,
+                maxInsertion,
+                maxDeletion,
+                maxEdits,
+                vFilter,
+                jFilter);
 
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < n; ++i) {
-
-        const std::string query = queries[i];
-
-        const std::optional<std::string> vFilter =
-            vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-
-        const std::optional<std::string> jFilter =
-            jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
-
-        futures.emplace_back(std::async(std::launch::async,
-            [this, &result, i, query,
-             maxSubstitution, maxInsertion, maxDeletion,
-             maxEdits, vFilter, jFilter, unique]() {
-
-                auto hits = this->SearchIndices(query,
-                                                maxSubstitution,
-                                                maxInsertion,
-                                                maxDeletion,
-                                                maxEdits,
-                                                vFilter,
-                                                jFilter);
-
-                if (!unique) {
-                    std::vector<int> gids;
-                    gids.reserve(hits.size());
-                    for (const auto& [idx, dist] : hits) {
-                        gids.push_back(groupIds_[idx]);
-                    }
-                    result[i] = std::move(gids);
-                    return;
-                }
-
-                std::unordered_set<int> s;
-                s.reserve(hits.size());
-                for (const auto& [idx, dist] : hits) {
-                    s.insert(groupIds_[idx]);
-                }
-
+            if (!unique) {
                 std::vector<int> gids;
-                gids.reserve(s.size());
-                for (int gid : s) {
-                    gids.push_back(gid);
+                gids.reserve(hits.size());
+                for (const auto& [idx, dist] : hits) {
+                    gids.push_back(groupIds_[idx]);
                 }
-
-                result[i] = std::move(gids);
-            }));
-
-        if (futures.size() >= maxConcurrent || i + 1 == n) {
-            for (auto& fut : futures) {
-                fut.get();
+                return gids;
             }
-            futures.clear();
-        }
-    }
 
-    return result;
+            std::unordered_set<int> seen;
+            seen.reserve(hits.size());
+            for (const auto& [idx, dist] : hits) {
+                seen.insert(groupIds_[idx]);
+            }
+
+            std::vector<int> gids;
+            gids.reserve(seen.size());
+            for (int gid : seen) {
+                gids.push_back(gid);
+            }
+            return gids;
+        });
 }
 
 std::unordered_set<AIRREntity> Trie::ClusterUsage(
         const std::vector<std::string>& cluster,
-        int maxSubstitution, int maxInsertion, int maxDeletion,
+        int maxSubstitution,
+        int maxInsertion,
+        int maxDeletion,
         std::optional<int> maxEdits,
         std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters) {
+        std::optional<std::vector<std::string>> jGeneFilters,
+        std::optional<std::size_t> numThreads) {
 
     if (vGeneFilters && vGeneFilters->size() != cluster.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as cluster");
@@ -602,46 +642,31 @@ std::unordered_set<AIRREntity> Trie::ClusterUsage(
         throw std::invalid_argument("jGeneFilters must have the same length as cluster");
     }
 
-    std::unordered_set<AIRREntity> result;
-    std::vector<std::future<std::vector<AIRREntity>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < cluster.size(); ++i) {
-        const std::string query = cluster[i];
-
-        const std::optional<std::string> vFilter =
+    auto batches = RunParallelOrdered<std::vector<AIRREntity>>(
+        cluster.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
                 vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-        const std::optional<std::string> jFilter =
+            const std::optional<std::string> jFilter =
                 jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
 
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query,
-             maxSubstitution, maxInsertion, maxDeletion,
-             maxEdits, vFilter, jFilter]() -> std::vector<AIRREntity> {
-                return this->SearchAIRR(query, maxSubstitution, maxInsertion,
-                                        maxDeletion, maxEdits, vFilter, jFilter);
-            }));
+            return this->SearchAIRR(
+                cluster[i],
+                maxSubstitution,
+                maxInsertion,
+                maxDeletion,
+                maxEdits,
+                vFilter,
+                jFilter);
+        });
 
-        if (futures.size() >= maxConcurrent) {
-            for (auto& fut : futures) {
-                auto matches = fut.get();
-                for (auto& entity : matches) {
-                    result.insert(std::move(entity));
-                }
-            }
-            futures.clear();
-        }
-    }
-
-    for (auto& fut : futures) {
-        auto matches = fut.get();
-        for (auto& entity : matches) {
+    std::unordered_set<AIRREntity> result;
+    for (auto& batch : batches) {
+        for (auto& entity : batch) {
             result.insert(std::move(entity));
         }
     }
-
     return result;
 }
 
@@ -649,7 +674,8 @@ std::unordered_set<AIRREntity> Trie::ClusterUsageWithMatrix(
         const std::vector<std::string>& cluster,
         float maxCost,
         std::optional<std::vector<std::string>> vGeneFilters,
-        std::optional<std::vector<std::string>> jGeneFilters) {
+        std::optional<std::vector<std::string>> jGeneFilters,
+        std::optional<std::size_t> numThreads) {
 
     if (vGeneFilters && vGeneFilters->size() != cluster.size()) {
         throw std::invalid_argument("vGeneFilters must have the same length as cluster");
@@ -658,43 +684,23 @@ std::unordered_set<AIRREntity> Trie::ClusterUsageWithMatrix(
         throw std::invalid_argument("jGeneFilters must have the same length as cluster");
     }
 
-    std::unordered_set<AIRREntity> result;
-    std::vector<std::future<std::vector<AIRREntity>>> futures;
-
-    std::size_t hc = std::thread::hardware_concurrency();
-    std::size_t maxConcurrent = 10 * (hc == 0 ? 1 : hc);
-
-    for (std::size_t i = 0; i < cluster.size(); ++i) {
-        const std::string query = cluster[i];
-
-        const std::optional<std::string> vFilter =
+    auto batches = RunParallelOrdered<std::vector<AIRREntity>>(
+        cluster.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const std::optional<std::string> vFilter =
                 vGeneFilters ? std::optional<std::string>((*vGeneFilters)[i]) : std::nullopt;
-        const std::optional<std::string> jFilter =
+            const std::optional<std::string> jFilter =
                 jGeneFilters ? std::optional<std::string>((*jGeneFilters)[i]) : std::nullopt;
+            return this->SearchWithMatrix(cluster[i], maxCost, vFilter, jFilter);
+        });
 
-        futures.emplace_back(std::async(std::launch::async,
-            [this, query, maxCost, vFilter, jFilter]() -> std::vector<AIRREntity> {
-                return this->SearchWithMatrix(query, maxCost, vFilter, jFilter);
-            }));
-
-        if (futures.size() >= maxConcurrent) {
-            for (auto& fut : futures) {
-                auto matches = fut.get();
-                for (auto& entity : matches) {
-                    result.insert(std::move(entity));
-                }
-            }
-            futures.clear();
-        }
-    }
-
-    for (auto& fut : futures) {
-        auto matches = fut.get();
-        for (auto& entity : matches) {
+    std::unordered_set<AIRREntity> result;
+    for (auto& batch : batches) {
+        for (auto& entity : batch) {
             result.insert(std::move(entity));
         }
     }
-
     return result;
 }
 
@@ -1561,4 +1567,358 @@ void Trie::PrintMatrix() {
         std::cout << "\n";
     }
     std::cout << std::endl;
+}
+
+
+std::optional<Trie::AlignmentResult> Trie::AlignQueryToTarget(
+        const std::string& query,
+        const std::string& target,
+        std::optional<int> maxSubstitution,
+        std::optional<int> maxInsertion,
+        std::optional<int> maxDeletion,
+        std::optional<int> maxEdits) {
+    const int qLen = static_cast<int>(query.size());
+    const int tLen = static_cast<int>(target.size());
+
+    const int maxSubLimit = maxSubstitution.value_or(std::min(qLen, tLen));
+    const int maxInsLimit = maxInsertion.value_or(tLen);
+    const int maxDelLimit = maxDeletion.value_or(qLen);
+    const int maxTotal = maxEdits.value_or(maxSubLimit + maxInsLimit + maxDelLimit);
+
+    if (maxSubLimit < 0 || maxInsLimit < 0 || maxDelLimit < 0 || maxTotal < 0) {
+        throw std::invalid_argument("Alignment limits must be non-negative");
+    }
+
+    std::vector<std::vector<std::vector<BoundedTraceState>>> cells(
+        qLen + 1,
+        std::vector<std::vector<BoundedTraceState>>(tLen + 1));
+
+    cells[0][0].push_back({0, 0, 0, -1, -1, -1, AlignmentOpType::Match});
+
+    for (int i = 0; i <= qLen; ++i) {
+        for (int j = 0; j <= tLen; ++j) {
+            const auto currentStates = cells[i][j];
+            for (int k = 0; k < static_cast<int>(currentStates.size()); ++k) {
+                const auto& state = currentStates[k];
+
+                if (i < qLen) {
+                    BoundedTraceState candidate = state;
+                    candidate.del = static_cast<int16_t>(candidate.del + 1);
+                    candidate.prevI = i;
+                    candidate.prevJ = j;
+                    candidate.prevK = k;
+                    candidate.op = AlignmentOpType::Deletion;
+
+                    if (candidate.del <= maxDelLimit && candidate.total() <= maxTotal) {
+                        AddPrunedState(cells[i + 1][j], candidate);
+                    }
+                }
+
+                if (j < tLen) {
+                    BoundedTraceState candidate = state;
+                    candidate.ins = static_cast<int16_t>(candidate.ins + 1);
+                    candidate.prevI = i;
+                    candidate.prevJ = j;
+                    candidate.prevK = k;
+                    candidate.op = AlignmentOpType::Insertion;
+
+                    if (candidate.ins <= maxInsLimit && candidate.total() <= maxTotal) {
+                        AddPrunedState(cells[i][j + 1], candidate);
+                    }
+                }
+
+                if (i < qLen && j < tLen) {
+                    BoundedTraceState candidate = state;
+                    const bool isMatch = query[i] == target[j];
+                    if (!isMatch) {
+                        candidate.sub = static_cast<int16_t>(candidate.sub + 1);
+                    }
+                    candidate.prevI = i;
+                    candidate.prevJ = j;
+                    candidate.prevK = k;
+                    candidate.op = isMatch ? AlignmentOpType::Match : AlignmentOpType::Substitution;
+
+                    if (candidate.sub <= maxSubLimit && candidate.total() <= maxTotal) {
+                        AddPrunedState(cells[i + 1][j + 1], candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    const auto& finalStates = cells[qLen][tLen];
+    int bestIndex = -1;
+    for (int k = 0; k < static_cast<int>(finalStates.size()); ++k) {
+        const auto& st = finalStates[k];
+        if (st.sub > maxSubLimit || st.ins > maxInsLimit || st.del > maxDelLimit || st.total() > maxTotal) {
+            continue;
+        }
+        if (bestIndex < 0) {
+            bestIndex = k;
+            continue;
+        }
+        const auto& best = finalStates[bestIndex];
+        const auto candidateKey = std::make_tuple(st.total(), st.ins + st.del, st.sub, st.del, st.ins);
+        const auto bestKey = std::make_tuple(best.total(), best.ins + best.del, best.sub, best.del, best.ins);
+        if (candidateKey < bestKey) {
+            bestIndex = k;
+        }
+    }
+
+    if (bestIndex < 0) {
+        return std::nullopt;
+    }
+
+    AlignmentResult result;
+    result.substitutions = finalStates[bestIndex].sub;
+    result.insertions = finalStates[bestIndex].ins;
+    result.deletions = finalStates[bestIndex].del;
+    result.distance = static_cast<float>(finalStates[bestIndex].total());
+
+    std::string queryAlignedRev;
+    std::string targetAlignedRev;
+    std::vector<AlignmentOp> opsRev;
+
+    int i = qLen;
+    int j = tLen;
+    int k = bestIndex;
+
+    while (true) {
+        const auto& state = cells[i][j][k];
+        if (state.prevI < 0) {
+            break;
+        }
+
+        switch (state.op) {
+            case AlignmentOpType::Match:
+                queryAlignedRev.push_back(query[i - 1]);
+                targetAlignedRev.push_back(target[j - 1]);
+                break;
+            case AlignmentOpType::Substitution:
+                queryAlignedRev.push_back(query[i - 1]);
+                targetAlignedRev.push_back(target[j - 1]);
+                opsRev.push_back({AlignmentOpType::Substitution, i, query[i - 1], target[j - 1]});
+                break;
+            case AlignmentOpType::Deletion:
+                queryAlignedRev.push_back(query[i - 1]);
+                targetAlignedRev.push_back('-');
+                opsRev.push_back({AlignmentOpType::Deletion, i, query[i - 1], '-'});
+                break;
+            case AlignmentOpType::Insertion:
+                queryAlignedRev.push_back('-');
+                targetAlignedRev.push_back(target[j - 1]);
+                opsRev.push_back({AlignmentOpType::Insertion, i, '-', target[j - 1]});
+                break;
+        }
+
+        const int nextI = state.prevI;
+        const int nextJ = state.prevJ;
+        const int nextK = state.prevK;
+        i = nextI;
+        j = nextJ;
+        k = nextK;
+    }
+
+    std::reverse(queryAlignedRev.begin(), queryAlignedRev.end());
+    std::reverse(targetAlignedRev.begin(), targetAlignedRev.end());
+    std::reverse(opsRev.begin(), opsRev.end());
+
+    result.queryAligned = std::move(queryAlignedRev);
+    result.targetAligned = std::move(targetAlignedRev);
+    result.ops = std::move(opsRev);
+    return result;
+}
+
+std::optional<Trie::AlignmentResult> Trie::AlignIndexHit(
+        const std::string& query,
+        size_t targetIndex,
+        std::optional<int> maxSubstitution,
+        std::optional<int> maxInsertion,
+        std::optional<int> maxDeletion,
+        std::optional<int> maxEdits) {
+    if (targetIndex >= sequences_.size()) {
+        return std::nullopt;
+    }
+    return AlignQueryToTarget(
+        query,
+        sequences_[targetIndex],
+        maxSubstitution,
+        maxInsertion,
+        maxDeletion,
+        maxEdits);
+}
+
+std::vector<std::optional<Trie::AlignmentResult>> Trie::AlignIndexHits(
+        const std::string& query,
+        const std::vector<std::pair<size_t, int>>& hits,
+        std::optional<int> maxSubstitution,
+        std::optional<int> maxInsertion,
+        std::optional<int> maxDeletion,
+        std::optional<int> maxEdits,
+        std::optional<std::size_t> numThreads) {
+    return RunParallelOrdered<std::optional<AlignmentResult>>(
+        hits.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const auto& [targetIndex, dist] = hits[i];
+            (void)dist;
+            return AlignIndexHit(
+                query,
+                targetIndex,
+                maxSubstitution,
+                maxInsertion,
+                maxDeletion,
+                maxEdits);
+        });
+}
+
+std::optional<Trie::AlignmentResult> Trie::AlignQueryToTargetWithMatrix(
+        const std::string& query,
+        const std::string& target,
+        std::optional<float> maxCost) {
+    if (!useSubstitutionMatrix_) {
+        throw std::runtime_error("No substitution matrix is loaded");
+    }
+
+    const int qLen = static_cast<int>(query.size());
+    const int tLen = static_cast<int>(target.size());
+
+    std::vector<std::vector<MatrixTraceCell>> dp(
+        qLen + 1,
+        std::vector<MatrixTraceCell>(tLen + 1));
+
+    dp[0][0].cost = 0.0f;
+    dp[0][0].reachable = true;
+    dp[0][0].prevI = -1;
+    dp[0][0].prevJ = -1;
+    dp[0][0].op = AlignmentOpType::Match;
+
+    for (int i = 0; i <= qLen; ++i) {
+        for (int j = 0; j <= tLen; ++j) {
+            if (!dp[i][j].reachable) {
+                continue;
+            }
+
+            if (i < qLen) {
+                const float candidateCost = dp[i][j].cost + substitutionMatrix_.at(query[i]).at('-');
+                if (BetterMatrixCandidate(candidateCost, AlignmentOpType::Deletion, dp[i + 1][j])) {
+                    dp[i + 1][j].cost = candidateCost;
+                    dp[i + 1][j].reachable = true;
+                    dp[i + 1][j].prevI = i;
+                    dp[i + 1][j].prevJ = j;
+                    dp[i + 1][j].op = AlignmentOpType::Deletion;
+                }
+            }
+
+            if (j < tLen) {
+                const float candidateCost = dp[i][j].cost + substitutionMatrix_.at('-').at(target[j]);
+                if (BetterMatrixCandidate(candidateCost, AlignmentOpType::Insertion, dp[i][j + 1])) {
+                    dp[i][j + 1].cost = candidateCost;
+                    dp[i][j + 1].reachable = true;
+                    dp[i][j + 1].prevI = i;
+                    dp[i][j + 1].prevJ = j;
+                    dp[i][j + 1].op = AlignmentOpType::Insertion;
+                }
+            }
+
+            if (i < qLen && j < tLen) {
+                const auto op = (query[i] == target[j]) ? AlignmentOpType::Match : AlignmentOpType::Substitution;
+                const float candidateCost = dp[i][j].cost + substitutionMatrix_.at(query[i]).at(target[j]);
+                if (BetterMatrixCandidate(candidateCost, op, dp[i + 1][j + 1])) {
+                    dp[i + 1][j + 1].cost = candidateCost;
+                    dp[i + 1][j + 1].reachable = true;
+                    dp[i + 1][j + 1].prevI = i;
+                    dp[i + 1][j + 1].prevJ = j;
+                    dp[i + 1][j + 1].op = op;
+                }
+            }
+        }
+    }
+
+    if (!dp[qLen][tLen].reachable) {
+        return std::nullopt;
+    }
+    if (maxCost.has_value() && dp[qLen][tLen].cost > *maxCost + kFloatEps) {
+        return std::nullopt;
+    }
+
+    AlignmentResult result;
+    result.distance = dp[qLen][tLen].cost;
+
+    std::string queryAlignedRev;
+    std::string targetAlignedRev;
+    std::vector<AlignmentOp> opsRev;
+
+    int i = qLen;
+    int j = tLen;
+    while (true) {
+        const auto& cell = dp[i][j];
+        if (cell.prevI < 0) {
+            break;
+        }
+
+        switch (cell.op) {
+            case AlignmentOpType::Match:
+                queryAlignedRev.push_back(query[i - 1]);
+                targetAlignedRev.push_back(target[j - 1]);
+                break;
+            case AlignmentOpType::Substitution:
+                ++result.substitutions;
+                queryAlignedRev.push_back(query[i - 1]);
+                targetAlignedRev.push_back(target[j - 1]);
+                opsRev.push_back({AlignmentOpType::Substitution, i, query[i - 1], target[j - 1]});
+                break;
+            case AlignmentOpType::Deletion:
+                ++result.deletions;
+                queryAlignedRev.push_back(query[i - 1]);
+                targetAlignedRev.push_back('-');
+                opsRev.push_back({AlignmentOpType::Deletion, i, query[i - 1], '-'});
+                break;
+            case AlignmentOpType::Insertion:
+                ++result.insertions;
+                queryAlignedRev.push_back('-');
+                targetAlignedRev.push_back(target[j - 1]);
+                opsRev.push_back({AlignmentOpType::Insertion, i, '-', target[j - 1]});
+                break;
+        }
+
+        const int nextI = cell.prevI;
+        const int nextJ = cell.prevJ;
+        i = nextI;
+        j = nextJ;
+    }
+
+    std::reverse(queryAlignedRev.begin(), queryAlignedRev.end());
+    std::reverse(targetAlignedRev.begin(), targetAlignedRev.end());
+    std::reverse(opsRev.begin(), opsRev.end());
+
+    result.queryAligned = std::move(queryAlignedRev);
+    result.targetAligned = std::move(targetAlignedRev);
+    result.ops = std::move(opsRev);
+    return result;
+}
+
+std::optional<Trie::AlignmentResult> Trie::AlignIndexHitWithMatrix(
+        const std::string& query,
+        size_t targetIndex,
+        std::optional<float> maxCost) {
+    if (targetIndex >= sequences_.size()) {
+        return std::nullopt;
+    }
+    return AlignQueryToTargetWithMatrix(query, sequences_[targetIndex], maxCost);
+}
+
+std::vector<std::optional<Trie::AlignmentResult>> Trie::AlignIndexHitsWithMatrix(
+        const std::string& query,
+        const std::vector<std::pair<size_t, float>>& hits,
+        std::optional<float> maxCost,
+        std::optional<std::size_t> numThreads) {
+    return RunParallelOrdered<std::optional<AlignmentResult>>(
+        hits.size(),
+        numThreads,
+        [&](std::size_t i) {
+            const auto& [targetIndex, dist] = hits[i];
+            (void)dist;
+            return AlignIndexHitWithMatrix(query, targetIndex, maxCost);
+        });
 }
