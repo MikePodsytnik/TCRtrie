@@ -79,12 +79,29 @@ def list_vdjdb_releases() -> list[tuple[str, str]]:
     return out
 
 
+def _cleanup_keep_only(directory: pathlib.Path, keep_names: set[str]) -> None:
+    if not directory.exists():
+        return
+
+    for p in directory.iterdir():
+        if p.name in keep_names:
+            continue
+        try:
+            if p.is_file() or p.is_symlink():
+                p.unlink()
+            elif p.is_dir():
+                _clear_dir(p)
+        except Exception:
+            pass
+
+
 def install_vdjdb_tag(*, tag: str, root: pathlib.Path | None = None) -> pathlib.Path:
     root = root or cache_root()
 
     airr = get_cached_airr_path(root, tag)
     sqlite = get_cached_sqlite_path(root, tag)
     if airr.exists() and sqlite.exists():
+        _cleanup_keep_only(root / tag, {"vdjdb_airr.tsv", "vdjdb.sqlite"})
         write_cached_active_tag(root, tag)
         return airr
 
@@ -93,6 +110,9 @@ def install_vdjdb_tag(*, tag: str, root: pathlib.Path | None = None) -> pathlib.
     sys.stderr.write("\n")
 
     vdjdb_txt_to_airr_and_sqlite(vdjdb_txt=vdjdb_txt, out_airr_tsv=airr, out_sqlite=sqlite)
+
+    _cleanup_keep_only(root / tag, {"vdjdb_airr.tsv", "vdjdb.sqlite"})
+
     write_cached_active_tag(root, tag)
     return airr
 
@@ -157,6 +177,7 @@ def install_vdjdb_web_latest(*, root: pathlib.Path | None = None) -> pathlib.Pat
     sqlite = web_dir / "vdjdb.sqlite"
     vdjdb_txt_to_airr_and_sqlite(vdjdb_txt=vdjdb_txt, out_airr_tsv=airr, out_sqlite=sqlite)
 
+    _cleanup_keep_only(web_dir, {"vdjdb_airr.tsv", "vdjdb.sqlite"})
+
     write_cached_active_tag(root, "web")
     return airr
-

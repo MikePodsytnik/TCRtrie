@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <sstream>
@@ -282,10 +283,10 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     int initialRowSimple[MAX_Q];
     for (int i = 0; i <= queryLength; ++i) initialRowSimple[i] = i;
 
-    StatCell initialRowDetailed[MAX_Q];
+        StatCell initialRowDetailed[MAX_Q];
     initialRowDetailed[0].push_back({0, 0, 0});
     for (int j = 1; j <= queryLength; ++j) {
-        if (j <= *maxEdits) {
+        if (j <= maxDeletion && j <= *maxEdits) {
             initialRowDetailed[j].push_back({0, 0, static_cast<int16_t>(j)});
         }
     }
@@ -342,7 +343,7 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
     StatCell initialRowDetailed[MAX_Q];
     initialRowDetailed[0].push_back({0, 0, 0});
     for (int j = 1; j <= queryLength; ++j) {
-        if (j <= *maxEdits) {
+        if (j <= maxDeletion && j <= *maxEdits) { // <--- ДОБАВЛЕНО j <= maxDeletion
             initialRowDetailed[j].push_back({0, 0, static_cast<int16_t>(j)});
         }
     }
@@ -936,22 +937,26 @@ void Trie::SearchRecursiveDetailed(
         const std::optional<std::string>& vGeneFilter,
         const std::optional<std::string>& jGeneFilter,
         EmitFunc emitFunc) {
+
     if (!node->indices.empty() && prevRowSimple[queryLength] <= maxEdits) {
-        bool found = false;
+        int bestValidDist = maxEdits + 1;
         const auto& cell = prevRowDetailed[queryLength];
+
         for (int i = 0; i < cell.size; ++i) {
             const auto& st = cell.data[i];
             if (st.sub <= maxSub && st.ins <= maxIns && st.del <= maxDel) {
-                found = true;
-                break;
+                if (st.total() < bestValidDist) {
+                    bestValidDist = st.total();
+                }
             }
         }
-        if (found) {
+
+        if (bestValidDist <= maxEdits) {
             for (int index : node->indices) {
                 bool vMatch = !vGeneFilter || vGenes_[index] == *vGeneFilter;
                 bool jMatch = !jGeneFilter || jGenes_[index] == *jGeneFilter;
                 if (vMatch && jMatch) {
-                    emitFunc(results, index, prevRowSimple[queryLength]);
+                    emitFunc(results, index, bestValidDist);
                 }
             }
         }
@@ -968,7 +973,8 @@ void Trie::SearchRecursiveDetailed(
         if (!child) continue;
         char letter = static_cast<char>('A' + ci);
 
-        int nextRowSimple[MAX_Q];
+        auto nextRowSimplePtr = std::make_unique<int[]>(MAX_Q);
+        int* nextRowSimple = nextRowSimplePtr.get();
         nextRowSimple[0] = prevRowSimple[0] + 1;
         int nextMinVal = nextRowSimple[0];
 
@@ -986,18 +992,20 @@ void Trie::SearchRecursiveDetailed(
 
         if (nextMinVal > maxEdits) continue;
 
-        StatCell nextRowDetailed[MAX_Q];
+        auto nextRowDetailedPtr = std::make_unique<StatCell[]>(MAX_Q);
+        StatCell* nextRowDetailed = nextRowDetailedPtr.get();
 
         {
+            StatCell& cand = nextRowDetailed[0];
             const auto& pcell = prevRowDetailed[0];
             for (int k = 0; k < pcell.size; ++k) {
                 const auto& st = pcell.data[k];
                 EditState ns = {st.sub, static_cast<int16_t>(st.ins + 1), st.del};
-                if (ns.total() <= maxEdits) {
-                    nextRowDetailed[0].push_back(ns);
+                if (ns.sub <= maxSub && ns.ins <= maxIns && ns.del <= maxDel && ns.total() <= maxEdits) {
+                    cand.push_back(ns);
                 }
             }
-            PrunePareto(nextRowDetailed[0]);
+            PrunePareto(cand);
         }
 
         for (int j = 1; j <= queryLength; ++j) {
@@ -1005,13 +1013,36 @@ void Trie::SearchRecursiveDetailed(
 
             StatCell& cand = nextRowDetailed[j];
 
+            // Инкрементальное добавление с фильтрацией Парето прямо на лету
+            auto add_cand = [&](EditState s) {
+                bool dominated = false;
+                for (int k = 0; k < cand.size; ++k) {
+                    const auto& r = cand.data[k];
+                    if (r.sub <= s.sub && r.ins <= s.ins && r.del <= s.del) {
+                        dominated = true;
+                        break;
+                    }
+                }
+                if (dominated) return;
+
+                StatCell filtered;
+                for (int k = 0; k < cand.size; ++k) {
+                    const auto& r = cand.data[k];
+                    if (!(s.sub <= r.sub && s.ins <= r.ins && s.del <= r.del)) {
+                        filtered.push_back(r);
+                    }
+                }
+                filtered.push_back(s);
+                cand = filtered;
+            };
+
             {
                 const auto& pcell = prevRowDetailed[j];
                 for (int k = 0; k < pcell.size; ++k) {
                     const auto& st = pcell.data[k];
                     EditState ns = {st.sub, static_cast<int16_t>(st.ins + 1), st.del};
-                    if (ns.total() <= maxEdits)
-                        cand.push_back(ns);
+                    if (ns.sub <= maxSub && ns.ins <= maxIns && ns.del <= maxDel && ns.total() <= maxEdits)
+                        add_cand(ns);
                 }
             }
 
@@ -1020,8 +1051,8 @@ void Trie::SearchRecursiveDetailed(
                 for (int k = 0; k < ncell.size; ++k) {
                     const auto& st = ncell.data[k];
                     EditState ns = {st.sub, st.ins, static_cast<int16_t>(st.del + 1)};
-                    if (ns.total() <= maxEdits)
-                        cand.push_back(ns);
+                    if (ns.sub <= maxSub && ns.ins <= maxIns && ns.del <= maxDel && ns.total() <= maxEdits)
+                        add_cand(ns);
                 }
             }
 
@@ -1031,12 +1062,10 @@ void Trie::SearchRecursiveDetailed(
                 for (int k = 0; k < pcell.size; ++k) {
                     const auto& st = pcell.data[k];
                     EditState ns = {static_cast<int16_t>(st.sub + cost), st.ins, st.del};
-                    if (ns.total() <= maxEdits)
-                        cand.push_back(ns);
+                    if (ns.sub <= maxSub && ns.ins <= maxIns && ns.del <= maxDel && ns.total() <= maxEdits)
+                        add_cand(ns);
                 }
             }
-
-            PrunePareto(cand);
         }
 
         SearchRecursiveDetailed(query, maxEdits, maxSub, maxIns, maxDel,
@@ -1521,8 +1550,6 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
             }
         }
     }
-
-    substitutionMatrix_.clear();
 
     substitutionMatrix_.clear();
 
