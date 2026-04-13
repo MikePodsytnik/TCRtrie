@@ -9,27 +9,12 @@ The library supports two search modes:
 - edit-distance-based search with bounded substitutions, insertions, and deletions;
 - matrix-based search where substitutions are scored using an amino acid substitution matrix.
 
-The core idea is to build a trie index over CDR3 amino acid sequences and use it for fast approximate matching.
-
 ## Main objects
 
 ### `VDJdb`
 
 `VDJdb` is a **lazy object**.
 It is initialized on first use and is **not callable**.
-Use it like this:
-
-```python
-from tcrtrie import VDJdb
-
-VDJdb.search(...)
-```
-
-Do **not** write:
-
-```python
-VDJdb()
-```
 
 ### `Trie`
 
