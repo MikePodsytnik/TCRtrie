@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 from ._tcrtrie import Trie, AIRREntity
 from .lazy import LazyObject
 from .vdjdb_cache import (
@@ -10,7 +12,7 @@ from .vdjdb_cache import (
 )
 from .vdjdb_client import VDJdbClient
 
-__all__ = ["Trie", "AIRREntity", "VDJdb"]
+__all__ = ["Trie", "AIRREntity", "VDJdbClient", "VDJdb"]
 
 
 def _build_vdjdb() -> VDJdbClient:
@@ -26,7 +28,9 @@ def _build_vdjdb() -> VDJdbClient:
             f"VDJdb cache for tag '{tag}' is incomplete. Run: tcrtrie-vdjdb-update --tag {tag}"
         )
 
-    return VDJdbClient(trie=Trie(str(airr)), sqlite_path=sqlite)
+    return VDJdbClient(trie=Trie(str(airr)), sqlitePath=sqlite)
 
-
-VDJdb = LazyObject(_build_vdjdb)
+if TYPE_CHECKING:
+    VDJdb: VDJdbClient
+else:
+    VDJdb = cast(VDJdbClient, LazyObject(_build_vdjdb))
