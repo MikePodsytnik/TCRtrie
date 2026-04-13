@@ -1340,8 +1340,8 @@ namespace {
 void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
                                   const std::string& delimiter,
                                   float gapFactor) {
-    if (gapFactor < 1.0f) {
-        std::cerr << "gapFactor must be >= 1.0\n";
+    if (gapFactor < 0.0f) {
+        std::cerr << "gapFactor must be >= 0.0\n";
         throw std::runtime_error("Invalid gapFactor");
     }
 
@@ -1519,15 +1519,7 @@ void Trie::LoadSubstitutionMatrix(const std::string& matrixPath,
         score['-']['-'] = 0.0f;
 
         for (char aa : kAminoAcids) {
-            float minValue = std::numeric_limits<float>::infinity();
-
-            for (char rowAa : kAminoAcids) {
-                minValue = std::min(minValue, score.at(rowAa).at(aa));
-            }
-
-            float gapScore = (minValue < 0.0f)
-                                 ? minValue * gapFactor
-                                 : minValue / gapFactor;
+            float gapScore = -score[aa][aa] * gapFactor;
 
             score[aa]['-'] = gapScore;
             score['-'][aa] = gapScore;

@@ -28,7 +28,7 @@ class VDJdbClient:
 
         matrixRes = ir.files(__package__).joinpath("data/matrices/blosum62.txt")
         with ir.as_file(matrixRes) as path:
-            self._trie.LoadSubstitutionMatrix(str(path), "", 1.5)
+            self._trie.LoadSubstitutionMatrix(str(path), "", 1.0)
 
     def _loadTable(self) -> pd.DataFrame:
         con = sqlite3.connect(self._sqlitePath)
@@ -225,7 +225,7 @@ class VDJdbClient:
         self,
         path: str | Path,
         delimiter: str = "",
-        gapFactor: float = 1.5,
+        gapFactor: float = 1.0,
     ) -> None:
         self._trie.LoadSubstitutionMatrix(str(path), delimiter, gapFactor)
 

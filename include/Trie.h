@@ -88,7 +88,7 @@ public:
 
     void LoadSubstitutionMatrix(const std::string& matrixPath,
                                 const std::string& delimiter = "",
-                                float gapFactor = 1.5f);
+                                float gapFactor = 1.0f);
     void PrintMatrix();
 
     std::vector<std::string> Search(const std::string& query, int maxEdits);
