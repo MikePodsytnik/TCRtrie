@@ -17,10 +17,27 @@
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+#include <tuple>
 
 namespace {
     constexpr int MAX_Q = 64;
     constexpr float kFloatEps = 1e-6f;
+
+    const std::string kAminoAcids = "ACDEFGHIKLMNPQRSTVWY";
+
+    bool IsCanonicalAminoAcidSequence(const std::string& sequence) {
+        if (sequence.empty()) {
+            return false;
+        }
+
+        for (char c : sequence) {
+            if (kAminoAcids.find(c) == std::string::npos) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     std::size_t ResolveThreadCount(std::optional<std::size_t> numThreads, std::size_t taskCount = 0) {
         std::size_t resolved = numThreads.value_or(4);
@@ -171,6 +188,10 @@ Trie::Trie(const std::vector<std::string>& sequences,
         vGenes_(vGenes),
         jGenes_(jGenes),
         groupIds_(sequences.size(), 0) {
+    if (sequences.size() != vGenes.size() || sequences.size() != jGenes.size()) {
+        throw std::invalid_argument("sequences, vGenes and jGenes must have the same length");
+    }
+
     BuildTrie();
 }
 
@@ -265,7 +286,8 @@ std::vector<AIRREntity> Trie::SearchAIRR(const std::string& query,
     }
 
     if (maxInsertion == 0 && maxDeletion == 0) {
-        SearchSubstitutionOnly(query, maxSubstitution, root_, 0, 0,
+        int effectiveMaxSub = std::min(maxSubstitution, *maxEdits);
+        SearchSubstitutionOnly(query, effectiveMaxSub, root_, 0, 0,
                                queryLength, results, vGeneFilter, jGeneFilter);
         return results;
     }
@@ -322,7 +344,8 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
     }
 
     if (maxInsertion == 0 && maxDeletion == 0) {
-        SearchSubstitutionOnlyIDs(query, maxSubstitution, root_, 0, 0,
+        int effectiveMaxSub = std::min(maxSubstitution, *maxEdits);
+        SearchSubstitutionOnlyIDs(query, effectiveMaxSub, root_, 0, 0,
                                   queryLength, results, vGeneFilter, jGeneFilter);
         return results;
     }
@@ -343,7 +366,7 @@ std::vector<std::pair<size_t, int>> Trie::SearchIndices(const std::string& query
     StatCell initialRowDetailed[MAX_Q];
     initialRowDetailed[0].push_back({0, 0, 0});
     for (int j = 1; j <= queryLength; ++j) {
-        if (j <= maxDeletion && j <= *maxEdits) { // <--- ДОБАВЛЕНО j <= maxDeletion
+        if (j <= maxDeletion && j <= *maxEdits) {
             initialRowDetailed[j].push_back({0, 0, static_cast<int16_t>(j)});
         }
     }
@@ -387,6 +410,14 @@ std::vector<AIRREntity> Trie::SearchWithMatrix(const std::string& query, float m
         return results;
     }
 
+    for (char c : query) {
+        if (substitutionMatrix_.find(c) == substitutionMatrix_.end()) {
+            std::cerr << "Query contains character absent from substitution matrix: "
+                      << c << std::endl;
+            return results;
+        }
+    }
+
     float initialRow[MAX_Q];
     initialRow[0] = 0.0f;
     for (int i = 1; i <= queryLength; ++i) {
@@ -415,6 +446,14 @@ std::vector<std::pair<size_t, float>> Trie::SearchIndicesWithMatrix(
     if (queryLength >= MAX_Q) {
         std::cerr << "Query length exceeds maximum allowed length." << std::endl;
         return results;
+    }
+
+    for (char c : query) {
+        if (substitutionMatrix_.find(c) == substitutionMatrix_.end()) {
+            std::cerr << "Query contains character absent from substitution matrix: "
+                      << c << std::endl;
+            return results;
+        }
     }
 
     float initialRow[MAX_Q];
@@ -1013,7 +1052,6 @@ void Trie::SearchRecursiveDetailed(
 
             StatCell& cand = nextRowDetailed[j];
 
-            // Инкрементальное добавление с фильтрацией Парето прямо на лету
             auto add_cand = [&](EditState s) {
                 bool dominated = false;
                 for (int k = 0; k < cand.size; ++k) {
@@ -1223,9 +1261,20 @@ void Trie::LoadAIRR(const std::string& dataPath) {
 void Trie::BuildTrie() {
     for (int idx = 0; idx < static_cast<int>(sequences_.size()); ++idx) {
         const auto& seq = sequences_[idx];
+
+        if (seq.size() > MAX_Q) {
+            std::cerr << "Skipping too long sequence "
+                      << seq << ": length = " << seq.size() << std::endl;
+            continue;
+        }
+
+        if (!IsCanonicalAminoAcidSequence(seq)) {
+            std::cerr << "Skipping sequence with non-canonical amino acid: " << seq << std::endl;
+            continue;
+        }
+
         TrieNode* node = root_;
         for (char c : seq) {
-            if (c < 'A' || c > 'Z') continue;
             int i = c - 'A';
             if (!node->children[i]) {
                 node->children[i] = new TrieNode();
@@ -1257,8 +1306,6 @@ Trie::TrieNode* Trie::CopyTrie(const TrieNode* node) {
 }
 
 namespace {
-    const std::string kAminoAcids = "ACDEFGHIKLMNPQRSTVWY";
-
     std::string Trim(const std::string& s) {
         std::size_t l = 0;
         while (l < s.size() && std::isspace(static_cast<unsigned char>(s[l]))) {

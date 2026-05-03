@@ -35,7 +35,7 @@ public:
         int total() const { return sub + ins + del; }
     };
 
-    static constexpr int kMaxPareto = 64;
+    static constexpr int kMaxPareto = 128;
 
     struct StatCell {
         EditState data[kMaxPareto];
