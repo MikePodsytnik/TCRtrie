@@ -1,0 +1,44 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "tcrtrie-cli"
+version = "0.1.0"
+description = "CLI tool for pairwise repertoire matching"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+  { name = "Mikhail Podsytnik" }
+]
+keywords = ["tcr", "cdr3", "immunoinformatics", "cli"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "Environment :: Console",
+  "Operating System :: OS Independent"
+]
+
+[project.scripts]
+tcrtrie = "tcrtrie.__main__:main"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build.verbose = true
+wheel.packages = ["python/tcrtrie"]
+install.components = ["python"]
+cmake.version = ">=3.16"
+
+[tool.scikit-build.sdist]
+exclude = [
+    "motifs",
+    "learning",
+    ".git",
+    ".idea",
+    "build",
+    "cmake-build-debug",
+    "__MACOSX",
+    "*.zip"
+]
